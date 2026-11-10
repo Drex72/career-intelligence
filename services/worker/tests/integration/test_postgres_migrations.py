@@ -15,7 +15,7 @@ def test_all_migrations_apply_and_protect_public_tables():
         conn.execute('''CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid
                         LANGUAGE SQL STABLE AS $$ SELECT null::uuid $$''')
         conn.execute('CREATE TABLE IF NOT EXISTS auth.users (id uuid primary key)')
-        conn.execute('DO $ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = \'service_role\') THEN CREATE ROLE service_role NOLOGIN; END IF; END $')
+        conn.execute("DO $ci$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN; END IF; END $ci$")
         for role in ('anon', 'authenticated'):
             conn.execute('DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = \'%s\') THEN CREATE ROLE %s NOLOGIN; END IF; END $$' % (role, role))
         # Guardrail for sharing Groundwork's database: existing objects and
