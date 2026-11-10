@@ -5,7 +5,7 @@ import {useCareerSession} from '@/components/AuthGate';
 import {ciFetch} from '@/lib/api';
 import {StateNotice} from '@/components/ResourceTable';
 
-type Operations={states:Record<string,number>};
+type Operations={states:Record<string,number>,delivery?:{date:string,state:string,delivered:number,target:number}|null};
 type Source={id:string,name:string,state:string,config:{provider:string,slug:string,company_name:string}};
 type QueueItem={job_id:string,title:string,company_name:string,apply_url:string|null,first_queued_at:string};
 
@@ -55,6 +55,14 @@ export default function Operations(){
     <section className="metric-grid">{Object.entries(tasks.data?.states||{}).map(([state,count])=><div className="metric" key={state}>
       <span>{state.replace(/_/g,' ')}</span><strong>{count}</strong></div>)}</section>
     {tasks.data&&Object.keys(tasks.data.states).length===0&&<div className="empty-state">No PostgreSQL workflow tasks have been created yet.</div>}
+    <section className="panel">
+      <div className="section-title"><div><h2>Daily recommendations</h2>
+        <p className="muted">Automatic batch assembly is scheduled for 07:00 Lagos time. Only verified-eligible jobs with source evidence can be delivered.</p>
+      </div></div>
+      {tasks.data?.delivery?
+        <p className="muted">Latest batch: {tasks.data.delivery.date} · {tasks.data.delivery.delivered} of {tasks.data.delivery.target} employers · {tasks.data.delivery.state}</p>:
+        <p className="muted">No daily delivery batch has been generated yet.</p>}
+    </section>
     <section className="panel">
       <div className="section-title"><div><h2>Public ATS boards</h2>
         <p className="muted">Register Greenhouse, Lever or Ashby public boards. No private scraping, paid services or emails.</p></div></div>
