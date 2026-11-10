@@ -13,3 +13,4 @@ def test_cli_exposes_postgres_operations_without_credentials():
     assert 'pg-generate-batch' in p.stdout
     assert 'pg-add-board' in p.stdout
     assert 'pg-research-eligibility' in p.stdout
+    assert 'pg-serve' in p.stdout

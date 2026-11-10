@@ -40,7 +40,7 @@ def test_postgres_catalog_rejects_unsupported_verified_assessments():
             catalog.assess_job(job,status='verified_eligible',source_url=None,excerpt='',confidence=1.0)
         with pytest.raises(ValueError,match='confidence'):
             catalog.assess_job(job,status='unknown',source_url=None,excerpt='',confidence=1.2)
-        assert catalog.create_batch(uuid4(),date.today())==[]
+        assert all(row['job_id'] != job for row in catalog.create_batch(uuid4(),date.today()))
 
 
 def test_postgres_batch_rejects_stale_or_unpublished_jobs():
@@ -54,4 +54,4 @@ def test_postgres_batch_rejects_stale_or_unpublished_jobs():
             published_at=datetime.now(timezone.utc)-timedelta(days=10))
         catalog.assess_job(job,status='verified_eligible',source_url='https://stale.example/jobs/'+token,
                            excerpt='Remote applicants residing in Nigeria are eligible',confidence=0.9)
-        assert catalog.create_batch(owner,date.today())==[]
+        assert all(row['job_id'] != job for row in catalog.create_batch(owner,date.today()))

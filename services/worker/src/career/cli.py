@@ -32,6 +32,7 @@ def build_parser():
     x=sub.add_parser('import-simplify',help='Import CSV application history');x.add_argument('file')
     x=sub.add_parser('export-simplify',help='Export compatible application CSV');x.add_argument('file')
     sub.add_parser('metrics',help='Print metrics JSON')
+    x=sub.add_parser('pg-serve',help='Serve authenticated owner-only PostgreSQL API'); x.add_argument('--host',default='127.0.0.1'); x.add_argument('--port',type=int,default=8000)
     x=sub.add_parser('pg-add-board',help='Register ATS board in ci_ PostgreSQL source registry'); x.add_argument('provider',choices=('greenhouse','lever','ashby')); x.add_argument('slug'); x.add_argument('name'); x.add_argument('--domain')
     x=sub.add_parser('pg-discover',help='Ingest permitted public feeds into ci_ PostgreSQL tables'); x.add_argument('--terms',default='backend engineer,software engineer'); x.add_argument('--board-limit',type=int,default=10); x.add_argument('--eligibility-limit',type=int,default=30)
     x=sub.add_parser('pg-research-eligibility',help='Verify pending role eligibility from official job pages'); x.add_argument('--limit',type=int,default=30)
@@ -55,6 +56,25 @@ def run(argv=None):
         from career.api import make_app
         import uvicorn
         uvicorn.run(make_app(args.db,token,args.owner),host=args.host,port=args.port)
+        return
+    if args.command=='pg-serve':
+        from career.pg_auth import SupabaseOwnerAuth
+        from career.pg_api import make_pg_app
+        db_url=os.environ.get('DATABASE_URL','')
+        owner_uuid=os.environ.get('CAREER_OWNER_UUID','')
+        supabase_url=os.environ.get('SUPABASE_URL','')
+        publishable_key=os.environ.get('SUPABASE_PUBLISHABLE_KEY','')
+        if not all((db_url,owner_uuid,supabase_url,publishable_key)):
+            raise SystemExit('DATABASE_URL, CAREER_OWNER_UUID, SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY required')
+        from fastapi import FastAPI
+        client=httpx.AsyncClient(follow_redirects=False)
+        verifier=SupabaseOwnerAuth(supabase_url,publishable_key,UUID(owner_uuid),client)
+        app=make_pg_app(db_url,verifier)
+        @app.on_event('shutdown')
+        async def close_auth_client():
+            await client.aclose()
+        import uvicorn
+        uvicorn.run(app,host=args.host,port=args.port)
         return
     if args.command.startswith('pg-'):
         from career.persistence.postgres_catalog import PostgresCareerCatalog

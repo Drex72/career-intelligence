@@ -205,3 +205,20 @@ class PostgresCareerCatalog:
                                            WHERE batch_id=%s ORDER BY rank''',(batch,)).fetchall()
             return [{'job_id':str(row['job_id']),'company_id':str(row['company_id']),
                      'rank':row['rank']} for row in results]
+
+    def list_batch(self, owner: UUID, day: date) -> list[dict]:
+        rows=self.conn.execute("""SELECT i.job_id,i.company_id,i.rank,j.title,j.apply_url,
+             j.published_at,c.legal_name AS company_name
+             FROM ci_daily_batches b JOIN ci_daily_batch_items i ON i.batch_id=b.id
+             JOIN ci_jobs j ON j.id=i.job_id JOIN ci_companies c ON c.id=i.company_id
+             WHERE b.owner_user_id=%s AND b.local_date=%s ORDER BY i.rank""",(owner,day)).fetchall()
+        return [{**dict(row),'job_id':str(row['job_id']),
+                 'company_id':str(row['company_id'])} for row in rows]
+
+    def metrics(self, owner: UUID) -> dict:
+        counts=self.conn.execute("""SELECT
+          (SELECT count(*) FROM ci_companies) AS companies,
+          (SELECT count(*) FROM ci_jobs) AS jobs,
+          (SELECT count(*) FROM ci_delivered_companies WHERE owner_user_id=%s) AS delivered,
+          (SELECT count(*) FROM ci_applications WHERE owner_user_id=%s) AS applications""",(owner,owner)).fetchone()
+        return dict(counts)
