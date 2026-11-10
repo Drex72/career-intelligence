@@ -250,7 +250,7 @@ Deno.serve(async (request:Request)=>{
       const sources=list(check(await db.from('ci_job_sources')
         .select('source_name,source_job_id,source_url').eq('job_id',body.job_id)
         .in('source_name',['greenhouse','lever','ashby']).order('retrieved_at',{ascending:false}).limit(5)));
-      let match=null;
+      let match:{provider:string,slug:string,sourceId:string,sourceURL:string}|null=null;
       for(const source of sources){
         const provider=source.source_name;
         if(!source.source_job_id || !['greenhouse','lever','ashby'].includes(provider))continue;
