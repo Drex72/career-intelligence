@@ -33,7 +33,7 @@ def build_parser():
     x=sub.add_parser('export-simplify',help='Export compatible application CSV');x.add_argument('file')
     sub.add_parser('metrics',help='Print metrics JSON')
     x=sub.add_parser('pg-serve',help='Serve authenticated owner-only PostgreSQL API'); x.add_argument('--host',default='127.0.0.1'); x.add_argument('--port',type=int,default=8000)
-    x=sub.add_parser('pg-vault-sync',help='Index approved local Obsidian vault into ci_ PostgreSQL knowledge'); x.add_argument('directory'); x.add_argument('--revision',default='local')
+    x=sub.add_parser('pg-vault-sync',help='Index approved local Obsidian vault into ci_ PostgreSQL knowledge'); x.add_argument('directory'); x.add_argument('--revision',default='local'); x.add_argument('--dry-run',action='store_true',help='Validate approved notes without database writes'); x.add_argument('--allow-empty',action='store_true',help='Explicitly authorize a full approved-note tombstone')
     x=sub.add_parser('pg-add-board',help='Register ATS board in ci_ PostgreSQL source registry'); x.add_argument('provider',choices=('greenhouse','lever','ashby')); x.add_argument('slug'); x.add_argument('name'); x.add_argument('--domain')
     x=sub.add_parser('pg-discover',help='Ingest permitted public feeds into ci_ PostgreSQL tables'); x.add_argument('--terms',default='backend engineer,software engineer'); x.add_argument('--board-limit',type=int,default=10); x.add_argument('--eligibility-limit',type=int,default=30)
     x=sub.add_parser('pg-research-eligibility',help='Verify pending role eligibility from official job pages'); x.add_argument('--limit',type=int,default=30)
@@ -86,13 +86,20 @@ def run(argv=None):
         from career.persistence.pg_eligibility import run_pg_eligibility
         from career.persistence.pg_people import run_pg_people
         from career.persistence.pg_knowledge import sync_vault
+        from career.knowledge.vault import scan_approved_vault
         from career.persistence.pg_matching import rank_verified_jobs
         dsn=os.environ.get('DATABASE_URL','')
         if not dsn:
             raise SystemExit('DATABASE_URL is required for PostgreSQL operations')
         with PostgresCareerCatalog(dsn) as catalog:
             if args.command=='pg-vault-sync':
-                result={'indexed':sync_vault(catalog,Path(args.directory),git_sha=args.revision)}
+                if args.dry_run:
+                    approved,skipped=scan_approved_vault(Path(args.directory))
+                    result={'dry_run':True,'approved':len(approved),'skipped':skipped,
+                            'database_modified':False}
+                else:
+                    result={'indexed':sync_vault(catalog,Path(args.directory),
+                        git_sha=args.revision,allow_empty=args.allow_empty)}
             elif args.command=='pg-rank':
                 result=rank_verified_jobs(catalog,limit=args.limit)
             elif args.command=='pg-add-board':
