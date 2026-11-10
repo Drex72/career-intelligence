@@ -383,3 +383,18 @@ input:focus,select:focus,textarea:focus{border-color:#6a9bd0;box-shadow:0 0 0 3p
  .nav-link.active,.mobile-nav-link.active,.filter-tab.is-selected{outline:2px solid Highlight;outline-offset:-2px}
  .status-dot{border:1px solid currentColor}
 }
+
+
+/* Contrast refinement from WCAG relative-luminance checks */
+:root{--subtle:#657483}
+th{color:#657483}
+.metric-tile-hint,.aside-kicker{color:#657483}
+.page-context{color:#657483!important}
+.brand small,.side-caption{color:#657483}
+input::placeholder,textarea::placeholder{color:#667586}
+.contact-card .muted,.principle-card p{color:#627181}
+.filter-tab{color:#586a7b}
+@media(max-width:780px){
+ .mobile-nav-link{color:#526579}
+ .story-footer{color:#c4dced}
+}
