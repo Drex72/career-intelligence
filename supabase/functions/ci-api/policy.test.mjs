@@ -52,3 +52,9 @@ test('official ATS review can only be initiated by POST',()=>{
  assert.deepEqual(route('https://localhost/api/ci/eligibility/review','POST'),{type:'reviewEligibility'});
  assert.equal(route('https://localhost/api/ci/eligibility/review','GET'),null);
 });
+
+test('candidate registration is read-only, explicit approval is POST-only',()=>{
+ assert.deepEqual(route('https://localhost/api/ci/source-candidates','GET'),{type:'read',path:'source-candidates'});
+ assert.deepEqual(route('https://localhost/api/ci/source-candidates/decision','POST'),{type:'decideCandidate'});
+ assert.equal(route('https://localhost/api/ci/source-candidates/decision','GET'),null);
+});

@@ -55,6 +55,8 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_postgres_ats.py -v
       - name: Verify official ATS eligibility decisions and private evidence audit
         run: python -m pytest services/worker/tests/integration/test_postgres_official_review.py -v
+      - name: Verify untrusted ATS candidate review and safe promotion
+        run: python -m pytest services/worker/tests/integration/test_postgres_candidates.py -v
       - name: Verify source registry migration and board metadata
         run: python -m pytest services/worker/tests/integration/test_postgres_sources.py -v
       - name: Verify versioned private knowledge ingestion

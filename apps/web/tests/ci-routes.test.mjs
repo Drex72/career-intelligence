@@ -41,3 +41,9 @@ test('official ATS review is owner POST-only',()=>{
  assert.equal(safePath(['eligibility','review'],'POST'),'eligibility/review');
  assert.equal(safePath(['eligibility','review'],'GET'),null);
 });
+
+test('unverified source candidates require owner approval POST',()=>{
+ assert.equal(safePath(['source-candidates'],'GET'),'source-candidates');
+ assert.equal(safePath(['source-candidates','decision'],'POST'),'source-candidates/decision');
+ assert.equal(safePath(['source-candidates','decision'],'GET'),null);
+});
