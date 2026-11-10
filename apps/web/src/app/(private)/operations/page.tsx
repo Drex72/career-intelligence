@@ -97,7 +97,7 @@ export default function Operations(){
         <p className="muted">Authenticated scheduled runs. Public-source research and eligibility checks only; no emails or simulated metrics.</p></div></div>
       {(tasks.data?.workerRuns||[]).map((run,i)=><div className="section-title" key={i}>
         <div><strong>{run.state}</strong><p className="muted">{new Date(run.started_at).toLocaleString()}</p></div>
-        <p className="muted">Feed jobs {run.details?.remotive??0} · ATS jobs {run.details?.ats_jobs??0} · Reviews {run.details?.reviewed??0} · Matches {run.details?.matched??0} · Source candidates {run.details?.candidates??0} · Failures {run.details?.failures??0}</p>
+        <p className="muted">Remotive jobs {run.details?.remotive??0} · Himalayas jobs {run.details?.himalayas??0} · ATS jobs {run.details?.ats_jobs??0} · Reviews {run.details?.reviewed??0} · Matches {run.details?.matched??0} · Source candidates {run.details?.candidates??0} · Failures {run.details?.failures??0}</p>
       </div>)}
       {tasks.data?.workerRuns?.length===0&&<p className="muted">No scheduled worker runs recorded yet.</p>}
     </section>
