@@ -1,5 +1,5 @@
 'use client';
-import {useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {useResource} from '@/components/useResource';
 import {useCareerSession} from '@/components/AuthGate';
 import {ciFetch} from '@/lib/api';
@@ -11,8 +11,8 @@ type Source={source_name:string;source_url:string;retrieved_at:string};
 type Evidence={source_url:string;source_kind:string;excerpt:string;observed_at:string;claim:string};
 type Assessment={status:string;confidence:number;assessed_at:string;reasons:unknown;contradictions:unknown};
 type EvidenceBundle={job:{id:string;title:string};sources:Source[];evidence:Evidence[];assessments:Assessment[];note:string};
-type Filter='all'|'verified_eligible'|'likely_eligible'|'unverified';
-const filters:{id:Filter;label:string}[]=[{id:'all',label:'All opportunities'},{id:'verified_eligible',label:'Verified eligible'},{id:'likely_eligible',label:'Likely eligible'},{id:'unverified',label:'Needs verification'}];
+type Filter='all'|'verified_eligible'|'likely_eligible'|'unverified'|'ineligible';
+const filters:{id:Filter;label:string}[]=[{id:'all',label:'All opportunities'},{id:'verified_eligible',label:'Verified eligible'},{id:'likely_eligible',label:'Likely eligible'},{id:'unverified',label:'Needs verification'},{id:'ineligible',label:'Not eligible'}];
 export default function Opportunities(){
   const {data,error,loading,reload}=useResource<{jobs:Job[]}>('jobs');
   const session=useCareerSession();
@@ -25,6 +25,11 @@ export default function Opportunities(){
   const [loadingEvidence,setLoadingEvidence]=useState(false);
   const [notice,setNotice]=useState('');
   const [scanError,setScanError]=useState('');
+  const requestNumber=useRef(0);
+  const evidenceHeading=useRef<HTMLHeadingElement>(null);
+  const lastTrigger=useRef<HTMLButtonElement|null>(null);
+  const [focusEvidence,setFocusEvidence]=useState(false);
+  useEffect(()=>{if(focusEvidence&&selected){evidenceHeading.current?.focus();setFocusEvidence(false);}},[focusEvidence,selected]);
   async function checkSource(){
     setChecking(true);setScanError('');setNotice('');
     try{
@@ -34,17 +39,29 @@ export default function Opportunities(){
     }catch(err){setScanError(err instanceof Error?err.message:'Unable to check source');}
     finally{setChecking(false);}
   }
-  async function inspect(jobId:string){
-    if(selected===jobId){setSelected(null);setEvidence(null);return;}
-    setSelected(jobId);setEvidence(null);setEvidenceError('');setLoadingEvidence(true);
-    try{const result=await ciFetch<EvidenceBundle>('jobs/'+jobId+'/evidence',session);setEvidence(result);}
-    catch(err){setEvidenceError(err instanceof Error?err.message:'Evidence unavailable');}
-    finally{setLoadingEvidence(false);}
+  function closeEvidence(){
+    requestNumber.current+=1;
+    setSelected(null);setEvidence(null);setLoadingEvidence(false);setEvidenceError('');
+    lastTrigger.current?.focus();
+  }
+  async function inspect(jobId:string,trigger:HTMLButtonElement){
+    if(selected===jobId){closeEvidence();return;}
+    const request=++requestNumber.current;
+    lastTrigger.current=trigger;
+    setSelected(jobId);setEvidence(null);setEvidenceError('');setLoadingEvidence(true);setFocusEvidence(true);
+    try{
+      const result=await ciFetch<EvidenceBundle>('jobs/'+jobId+'/evidence',session);
+      if(request===requestNumber.current)setEvidence(result);
+    }catch(err){
+      if(request===requestNumber.current)setEvidenceError(err instanceof Error?err.message:'Evidence unavailable');
+    }finally{
+      if(request===requestNumber.current)setLoadingEvidence(false);
+    }
   }
   const jobs=data?.jobs||[];
   const filtered=jobs.filter(j=>{
     const matches=(j.company_name+' '+j.title).toLowerCase().includes(search.trim().toLowerCase());
-    return matches&&(filter==='all'||(filter==='unverified'?(!j.eligibility||j.eligibility==='unverified'||j.eligibility==='unknown'||j.eligibility==='pending'):j.eligibility===filter));
+    return matches&&(filter==='all'||(filter==='unverified'?(!j.eligibility||!['verified_eligible','likely_eligible','ineligible'].includes(j.eligibility)):j.eligibility===filter));
   });
   const selectedJob=jobs.find(j=>j.id===selected);
   return <div className="opportunity-page">
@@ -65,14 +82,14 @@ export default function Opportunities(){
       {!loading&&!error&&<ResourceTable rowKey={r=>r.id} ariaLabel="Matching opportunities" items={filtered} columns={[
         {key:'employer',label:'Employer & role',render:r=><div className="job-identity"><span className="company-avatar" aria-hidden="true">{r.company_name.charAt(0).toUpperCase()}</span><div><strong>{r.title}</strong><span>{r.company_name}</span></div></div>},
         {key:'status',label:'Hiring eligibility',render:r=><Status value={r.eligibility}/>},
-        {key:'score',label:'Match',render:r=><span className="score-value">{r.match_score?Math.round(r.match_score)+'%':'—'}</span>},
+        {key:'score',label:'Match',render:r=><span className="score-value">{Number.isFinite(r.match_score)&&r.match_score>0?Math.round(r.match_score)+'%':'Not scored'}</span>},
         {key:'source',label:'Source',render:r=><span className="muted">{r.source==='remotive'?'Remotive':(r.source||'Unspecified')}</span>},
         {key:'date',label:'Posted',render:r=><span className="muted">{safeDateLabel(r.published_at)}</span>},
-        {key:'actions',label:'Actions',render:r=><div className="table-inline-actions"><button type="button" className="table-action" aria-expanded={selected===r.id} onClick={()=>void inspect(r.id)}>{selected===r.id?'Hide evidence':'Evidence'}</button><a href={r.apply_url} target="_blank" rel="noopener noreferrer" className="table-action" aria-label={'View official listing for '+r.title+' at '+r.company_name}>Listing ↗</a></div>},
+        {key:'actions',label:'Actions',render:r=><div className="table-inline-actions"><button type="button" className="table-action" aria-expanded={selected===r.id} aria-controls="opportunity-evidence" onClick={event=>void inspect(r.id,event.currentTarget)}>{selected===r.id?'Hide evidence':'Evidence'}</button><a href={r.apply_url} target="_blank" rel="noopener noreferrer" className="table-action" aria-label={'View official listing for '+r.title+' at '+r.company_name}>Listing ↗</a></div>},
       ]} empty={search||filter!=='all'?'No positions match these filters. Try a different search or eligibility filter.':'No public jobs have been imported yet. Use Check public jobs to retrieve recent listings.'}/>}
     </section>
-    {selected&&<section className="workspace-surface evidence-panel" aria-labelledby="evidence-title">
-      <div className="section-heading"><div><p className="page-context">RESEARCH DETAIL</p><h2 id="evidence-title">Eligibility evidence</h2><p>{selectedJob?.company_name} · {selectedJob?.title||'Selected role'}</p></div><button type="button" className="button-secondary" onClick={()=>{setSelected(null);setEvidence(null);}}>Close panel</button></div>
+    {selected&&<section id="opportunity-evidence" className="workspace-surface evidence-panel" aria-labelledby="evidence-title">
+      <div className="section-heading"><div><p className="page-context">RESEARCH DETAIL</p><h2 id="evidence-title" ref={evidenceHeading} tabIndex={-1}>Eligibility evidence</h2><p>{selectedJob?.company_name} · {selectedJob?.title||'Selected role'}</p></div><button type="button" className="button-secondary" onClick={closeEvidence}>Close panel</button></div>
       {loadingEvidence&&<div className="loading-state" role="status">Retrieving source evidence…</div>}
       {evidenceError&&<Notice tone="danger">{evidenceError}</Notice>}
       {evidence&&<div className="evidence-grid">
