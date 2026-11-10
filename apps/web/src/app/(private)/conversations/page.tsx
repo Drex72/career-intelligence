@@ -1,4 +1,5 @@
 'use client';
+import {PageHeading} from '@/components/WorkspaceUI';
 import { useMemo,useState,type FormEvent } from 'react';
 import { useResource } from '@/components/useResource';
 import { useCareerSession } from '@/components/AuthGate';
@@ -26,24 +27,23 @@ export default function Conversations(){
     catch(error){setMessage(error instanceof Error?error.message:'Could not record the reply');}
     finally{setBusy(false);}
   }
-  return <><header className="page-header"><div><span className="eyebrow">FOLLOW-UP INTELLIGENCE</span>
-    <h1>Conversations</h1><p className="muted">Record actual replies. The system preserves their evidence without treating a single rejection as company-wide policy.</p>
-    </div></header>
-    <section className="info-panel"><h3>Source verification</h3><p>Only submit replies you received. Employer restrictions remain user-reported evidence until independently verified. This screen never sends email.</p></section>
-    <section className="panel"><div className="section-title"><h2>Record a recruiter reply</h2></div>
+  return <><PageHeading meta="FOLLOW UP / LEARN" title="Conversations" description="Keep a dependable record of recruiter replies and what they actually say."/>
+    <section className="workspace-surface guidance-surface"><h3>Source verification</h3><p>Only submit replies you received. Employer restrictions remain user-reported evidence until independently verified. This screen never sends email.</p></section>
+    <div className="split-workflow"><section className="workspace-surface"><div className="section-title"><h2>Record a recruiter reply</h2></div>
       <form className="application-form" onSubmit={submit}>
         <label>Existing draft<select required value={draftId} onChange={e=>setDraftId(e.target.value)}><option value="">Select job and contact</option>
           {(drafts.data?.drafts||[]).map(d=><option key={d.id} value={d.id}>{d.subject}</option>)}</select></label>
         <label>Evidence link<input type="url" required placeholder="https://mail.google.com/mail/..." value={source} onChange={e=>setSource(e.target.value)}/></label>
-        <label className="notes-field">Reply text<input required maxLength={4000} value={body} onChange={e=>setBody(e.target.value)} placeholder="Exact reply received"/></label>
+        <label className="notes-field">Reply text<textarea rows={6} required maxLength={4000} value={body} onChange={e=>setBody(e.target.value)} placeholder="Paste the exact reply you received"/></label>
         <button disabled={busy||!draftId||!body||!source} type="submit">{busy?'Recording…':'Record reply'}</button>
       </form><p aria-live="polite" className="muted">{message}</p></section>
-    <section className="panel"><StateNotice loading={events.loading} error={events.error}/>
+    <section className="workspace-surface"><div className="section-title"><h2>Reply history</h2><p className="muted">Recorded conversations are evidence, not company-wide hiring policy.</p></div><StateNotice loading={events.loading} error={events.error}/>
       {events.data&&<ResourceTable items={events.data.events} columns={[
         {key:'contact',label:'Contact',render:r=><strong>{r.contact_name||'Unknown'}</strong>},
         {key:'company',label:'Company',render:r=>r.company_name||'Unknown'},
         {key:'event',label:'Result',render:r=><Status value={r.event_type}/>},
         {key:'date',label:'Recorded',render:r=>safeDateLabel(r.occurred_at)},
       ]} empty="No recorded replies yet."/>}</section>
+    </div>
   </>;
 }

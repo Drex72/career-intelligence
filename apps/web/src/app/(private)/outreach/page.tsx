@@ -1,4 +1,5 @@
 'use client';
+import {PageHeading} from '@/components/WorkspaceUI';
 import { useMemo, useState, type FormEvent } from 'react';
 import { useResource } from '@/components/useResource';
 import { useCareerSession } from '@/components/AuthGate';
@@ -26,10 +27,9 @@ export default function Outreach(){
     catch(error){setMessage(error instanceof Error?error.message:'Could not create draft');}
     finally{setBusy(false);}
   }
-  return <><header className="page-header"><div><span className="eyebrow">NETWORKING</span><h1>Outreach workspace</h1>
-    <p className="muted">Prepare evidence-backed drafts. Email sending is unavailable from this screen.</p></div></header>
-    <section className="info-panel"><h3>Automatic sending is off</h3><p>Draft generation cannot authorize or dispatch email. Sending requires separate approval and a verified application.</p></section>
-    <section className="panel"><div className="section-title"><h2>Prepare a draft</h2></div>
+  return <><PageHeading meta="CONNECT / COMMUNICATE" title="Outreach workspace" description="Prepare thoughtful, evidence-backed messages while keeping every send under your control."/>
+    <section className="workspace-surface guidance-surface"><h3>Automatic sending is off</h3><p>Draft generation cannot authorize or dispatch email. Sending requires separate approval and a verified application.</p></section>
+    <div className="split-workflow"><section className="workspace-surface"><div className="section-title"><h2>Prepare a draft</h2></div>
       <form className="application-form" onSubmit={submit}>
         <label>Eligible position<select required value={jobId} onChange={e=>{setJobId(e.target.value);setContactId('');}}><option value="">Choose verified eligible job</option>
           {eligibleJobs.map(j=><option key={j.id} value={j.id}>{j.company_name} · {j.title}</option>)}</select></label>
@@ -39,11 +39,12 @@ export default function Outreach(){
       </form><p aria-live="polite" className="muted">{message}</p>
       {selectedJob&&contacts.length===0&&<p className="muted">No sourced people at this company yet. Employee research may still be pending.</p>}
     </section>
-    <section className="panel"><StateNotice loading={drafts.loading} error={drafts.error}/>
+    <section className="workspace-surface"><div className="section-title"><h2>Your drafts</h2><p className="muted">Private drafts prepared for review. No messages have been sent.</p></div><StateNotice loading={drafts.loading} error={drafts.error}/>
       {drafts.data&&<ResourceTable items={drafts.data.drafts} columns={[
         {key:'subject',label:'Subject',render:r=><strong>{r.subject}</strong>},
         {key:'preview',label:'Preview',render:r=><span className="muted">{r.body.slice(0,140)}{r.body.length>140?'…':''}</span>},
         {key:'status',label:'Status',render:r=><Status value={r.status}/>},
       ]} empty="No outreach drafts yet."/>}</section>
+    </div>
   </>;
 }
