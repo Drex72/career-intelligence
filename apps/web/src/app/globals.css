@@ -532,3 +532,65 @@ tbody tr:hover{background:#FCF9FF}
 .login-brand-logo{width:46px;height:46px;object-fit:contain;margin-bottom:10px}
 .login-layout .login-card .login-brand-logo{display:block}
 @media(max-width:780px){.story-brand-logo{width:36px;height:36px}}
+
+
+/* Composable production UI components (Radix Themes + TanStack + Recharts) */
+.radix-themes{--default-font-family:"DM Sans","Avenir Next","Segoe UI",sans-serif;--heading-font-family:"Plus Jakarta Sans","Avenir Next",sans-serif;--accent-9:#7052D7;--accent-10:#6244C4;--accent-11:#6143BA}
+.analytics-card{width:100%;min-width:0;margin-bottom:23px;padding:23px!important;border-radius:17px!important;border:1px solid var(--border)!important;box-shadow:var(--shadow)!important;background:#FFFEFF!important}
+.analytics-heading{display:flex;align-items:start;justify-content:space-between;gap:15px;flex-wrap:wrap;margin-bottom:13px}
+.analytics-heading h2{font-size:17px;line-height:1.35;letter-spacing:-.025em;margin:5px 0}
+.analytics-heading .page-context{margin-bottom:4px!important;font-size:10px!important}
+.analytics-chart{width:100%;min-width:0;min-height:245px}
+.chart-key-list{display:flex;flex-wrap:wrap;gap:7px;margin:9px 0 0;padding:0;list-style:none}
+.chart-key-list li{display:flex;align-items:center;gap:7px;background:#F9F6FD;border:1px solid #E9E2F4;padding:7px 10px;border-radius:7px;font-size:11px;color:#5A4C70}
+.chart-key-list li strong{font-variant-numeric:tabular-nums;color:var(--text)}
+.chart-key-swatch{width:9px;height:9px;border-radius:3px;flex:none}
+.workflow-bars{display:grid;gap:13px;margin:16px 0}
+.workflow-bar-row{display:grid;gap:6px}
+.workflow-bar-label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;text-transform:capitalize;color:#4E4265}
+.workflow-bar-label strong{font-variant-numeric:tabular-nums;color:#32254E}
+.workflow-bar-track{height:9px;background:#EFEAFA;border-radius:999px;overflow:hidden}
+.workflow-bar-fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,#7759DF,#A98DF8);min-width:0;transition:width 180ms ease-out}
+.opportunity-glance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:0 0 22px}
+.opportunity-glance>div{display:flex;flex-direction:column;gap:7px;min-height:102px;padding:18px 21px;border:1px solid #E4DBF1;border-radius:13px;background:#F0EAFF}
+.opportunity-glance>div:nth-child(2){background:#EAF6EE;border-color:#D4EADC}
+.opportunity-glance>div:nth-child(3){background:#FFF2E5;border-color:#F0DECA}
+.opportunity-glance span{font-size:11px;color:#645772;font-weight:650}
+.opportunity-glance strong{font-family:"Plus Jakarta Sans","Avenir Next",sans-serif;font-size:27px;color:#332450;line-height:1.15}
+.opportunity-surface.rt-Card{display:block!important;padding:25px!important;margin-bottom:20px}
+.explorer-controls-v2{margin:0 0 19px}
+.search-field-v2{width:min(100%,420px)}
+.search-field-v2 .rt-TextFieldRoot{width:100%;border-radius:10px}
+.filter-scroll{max-width:100%;overflow-x:auto;scrollbar-width:thin;padding-bottom:3px}
+.filter-scroll .rt-SegmentedControlRoot{min-width:max-content}
+.modern-data-table{min-width:830px;width:100%;border-collapse:collapse;font-size:12px}
+.modern-data-table thead{background:#F9F5FD}
+.modern-data-table th{font-weight:700;color:#5E5372;text-align:left;padding:14px 12px;border-bottom:1px solid #E7E0F0}
+.modern-data-table td{padding:14px 12px;border-bottom:1px solid #F0EAF5;vertical-align:middle}
+.modern-data-table tbody tr:hover{background:#FCFAFF}
+.modern-data-table th:last-child,.modern-data-table td:last-child{min-width:170px}
+.column-sort-button{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;width:100%;background:transparent;color:inherit;border:0;text-align:left;padding:4px 0;font-size:12px;font-weight:700;white-space:nowrap}
+.column-sort-button>span{color:#8B77AE;font-size:13px}
+.column-sort-button:hover{color:#6241B3}
+.eligibility-cell{display:flex;align-items:flex-start;flex-direction:column;gap:5px;min-width:135px}
+.eligibility-reason{display:block;font-size:10px;color:#776B82;line-height:1.35;max-width:180px}
+.data-grid-footer{display:flex;justify-content:space-between;align-items:center;gap:15px;flex-wrap:wrap;padding:17px 2px 12px;color:#665979;font-size:11px;font-variant-numeric:tabular-nums}
+.evidence-dialog{max-height:min(84vh,860px);overflow-y:auto}
+.evidence-dialog-body{display:grid;gap:22px}
+.evidence-dialog-body section>h3{font-size:13px;margin:0 0 12px;color:#2C2241}
+.evidence-intro{border:1px solid #E8DFF4;background:#F7F1FF;border-radius:12px;padding:14px 17px}
+.evidence-intro strong{font-size:12px;color:#5A3FA0}
+.evidence-intro p{font-size:12px;color:#645477;margin-top:4px;overflow-wrap:anywhere}
+.evidence-dialog .evidence-list li{flex-direction:column;align-items:flex-start;background:#FCFAFE}
+.evidence-dialog a{overflow-wrap:anywhere}
+.applications-page>.analytics-card{margin-top:4px}
+@media(max-width:850px){.opportunity-surface.rt-Card{padding:18px!important}}
+@media(max-width:600px){
+ .opportunity-glance{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .opportunity-glance>div:last-child{grid-column:1/-1;min-height:86px}
+ .analytics-card{padding:16px!important}
+ .analytics-heading h2{font-size:15px}
+ .data-grid-footer{align-items:flex-start}
+}
+@media(max-width:360px){.opportunity-glance{grid-template-columns:1fr}.opportunity-glance>div:last-child{grid-column:auto}}
+@media(prefers-reduced-motion:reduce){.workflow-bar-fill{transition:none}}
