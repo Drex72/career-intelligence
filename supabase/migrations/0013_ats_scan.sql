@@ -83,7 +83,7 @@ begin
     on conflict(job_id) do update set last_seen_at=now();
   return v_job_id;
 end;
-$;
+$$;
 revoke all on function ci_ingest_ats_job(text,text,text,text,text,text,timestamptz,text)
   from public, anon, authenticated;
 grant execute on function ci_ingest_ats_job(text,text,text,text,text,text,timestamptz,text)
