@@ -19,6 +19,7 @@ export default function Operations(){
   const [company,setCompany]=useState('');
   const [busy,setBusy]=useState(false);
   const [scanning,setScanning]=useState<string|null>(null);
+  const [reviewing,setReviewing]=useState<string|null>(null);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
 
@@ -44,6 +45,18 @@ export default function Operations(){
       review.reload();tasks.reload();
     }catch(e){setError(e instanceof Error?e.message:'ATS scan failed');}
     finally{setScanning(null);}
+  }
+
+  async function reviewJob(id:string){
+    setReviewing(id);setError('');setMessage('');
+    try{
+      const result=await ciFetch<{status:string,confidence:number,reason:string}>('eligibility/review',session,{
+        method:'POST',body:JSON.stringify({job_id:id})
+      });
+      setMessage('Eligibility: '+result.status+' ('+Math.round(result.confidence*100)+'% confidence). '+result.reason);
+      review.reload();tasks.reload();
+    }catch(e){setError(e instanceof Error?e.message:'Official ATS review failed');}
+    finally{setReviewing(null);}
   }
 
   return <>
@@ -92,7 +105,9 @@ export default function Operations(){
       <StateNotice loading={review.loading} error={review.error}/>
       {(review.data?.items||[]).slice(0,50).map(item=><div className="section-title" key={item.job_id}>
         <div><strong>{item.company_name}</strong><p className="muted">{item.title}</p></div>
-        {item.apply_url?.startsWith('https://')&&<a href={item.apply_url} target="_blank" rel="noopener noreferrer" className="text-link">Official posting</a>}
+        <div><button type="button" className="outline-button" disabled={reviewing!==null} onClick={()=>void reviewJob(item.job_id)}>
+          {reviewing===item.job_id?'Reviewing…':'Review eligibility'}
+        </button> {item.apply_url?.startsWith('https://')&&<a href={item.apply_url} target="_blank" rel="noopener noreferrer" className="text-link">Official posting</a>}</div>
       </div>)}
       {review.data?.items.length===0&&<p className="muted">No pending ATS eligibility-review tasks.</p>}
     </section>

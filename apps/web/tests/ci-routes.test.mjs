@@ -36,3 +36,8 @@ test('ATS registration and scanning are POST-only and queues are read-only',()=>
   assert.equal(safePath(['eligibility-queue'],'GET'),'eligibility-queue');
   assert.equal(safePath(['eligibility-queue'],'POST'),null);
 });
+
+test('official ATS review is owner POST-only',()=>{
+ assert.equal(safePath(['eligibility','review'],'POST'),'eligibility/review');
+ assert.equal(safePath(['eligibility','review'],'GET'),null);
+});
