@@ -1,4 +1,5 @@
 'use client';
+import {PageHeading} from '@/components/WorkspaceUI';
 import {useState, type FormEvent} from 'react';
 import {useResource} from '@/components/useResource';
 import {useCareerSession} from '@/components/AuthGate';
@@ -76,15 +77,12 @@ export default function Operations(){
   }
 
   return <>
-    <header className="page-header"><div><span className="eyebrow">WORKFLOW RELIABILITY</span><h1>Agent operations</h1>
-      <p className="muted">Real queued tasks and source activity. No simulated metrics.</p></div>
-      <button className="outline-button" onClick={()=>{tasks.reload();sources.reload();review.reload();candidates.reload();}}>Refresh</button>
-    </header>
+    <PageHeading meta="SYSTEM / OPERATIONS" title="Agent operations" description="Review source discovery, eligibility research, and scheduled work using real system activity." action={<button className="button-secondary" type="button" onClick={()=>{tasks.reload();sources.reload();review.reload();candidates.reload();}}>Refresh activity</button>}/>
     <StateNotice loading={tasks.loading} error={tasks.error}/>
     <section className="metric-grid">{Object.entries(tasks.data?.states||{}).map(([state,count])=><div className="metric" key={state}>
       <span>{state.replace(/_/g,' ')}</span><strong>{count}</strong></div>)}</section>
     {tasks.data&&Object.keys(tasks.data.states).length===0&&<div className="empty-state">No PostgreSQL workflow tasks have been created yet.</div>}
-    <section className="panel">
+    <div className="operations-overview-grid"><section className="workspace-surface">
       <div className="section-title"><div><h2>Daily recommendations</h2>
         <p className="muted">Automatic batch assembly is scheduled for 07:00 Lagos time. Only verified-eligible jobs with source evidence can be delivered.</p>
       </div></div>
@@ -92,7 +90,7 @@ export default function Operations(){
         <p className="muted">Latest batch: {tasks.data.delivery.date} · {tasks.data.delivery.delivered} of {tasks.data.delivery.target} employers · {tasks.data.delivery.state}</p>:
         <p className="muted">No daily delivery batch has been generated yet.</p>}
     </section>
-    <section className="panel">
+    <section className="workspace-surface">
       <div className="section-title"><div><h2>Unattended discovery worker</h2>
         <p className="muted">Authenticated scheduled runs. Public-source research and eligibility checks only; no emails or simulated metrics.</p></div></div>
       {(tasks.data?.workerRuns||[]).map((run,i)=><div className="section-title" key={i}>
@@ -101,7 +99,8 @@ export default function Operations(){
       </div>)}
       {tasks.data?.workerRuns?.length===0&&<p className="muted">No scheduled worker runs recorded yet.</p>}
     </section>
-    <section className="panel">
+    </div>
+    <section className="workspace-surface">
       <div className="section-title"><div><h2>Public ATS boards</h2>
         <p className="muted">Register Greenhouse, Lever or Ashby public boards. No private scraping, paid services or emails.</p></div></div>
       <form onSubmit={e=>void addBoard(e)} className="toolbar">
@@ -124,7 +123,7 @@ export default function Operations(){
       </div>)}
       {sources.data?.sources.length===0&&<p className="muted">No ATS boards registered yet. Scans are limited to once every six hours per board.</p>}
     </section>
-    <section className="panel">
+    <section className="workspace-surface">
       <div className="section-title"><div><h2>Discovered ATS candidates</h2>
         <p className="muted">Possible employer job boards found in attributed public postings. Review each source before activation; company identity is not yet verified.</p></div></div>
       <StateNotice loading={candidates.loading} error={candidates.error}/>
@@ -138,7 +137,7 @@ export default function Operations(){
       </div>)}
       {candidates.data?.candidates.length===0&&<p className="muted">No unreviewed source candidates. Check public jobs to look for linked ATS boards.</p>}
     </section>
-    <section className="panel">
+    <section className="workspace-surface">
       <div className="section-title"><div><h2>Needs eligibility research</h2>
         <p className="muted">ATS listings are not eligible recommendations until role-specific employer evidence is reviewed.</p></div></div>
       <StateNotice loading={review.loading} error={review.error}/>

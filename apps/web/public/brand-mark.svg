@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+<title id="title">Career Intelligence symbol</title><desc id="desc">An opening compass path surrounding a rising signal in violet and amber.</desc>
+<defs><linearGradient id="path" x1="8" y1="5" x2="55" y2="56" gradientUnits="userSpaceOnUse"><stop stop-color="#AE8BFF"/><stop offset="1" stop-color="#7251DE"/></linearGradient><linearGradient id="ray" x1="26" y1="27" x2="56" y2="51" gradientUnits="userSpaceOnUse"><stop stop-color="#FFC68B"/><stop offset="1" stop-color="#FF9476"/></linearGradient></defs>
+<path d="M46.6 12.6A25.7 25.7 0 0 0 8.7 40.7" fill="none" stroke="url(#path)" stroke-width="10" stroke-linecap="round"/>
+<path d="M16.8 48.3A25.4 25.4 0 0 0 32 54.2" fill="none" stroke="#8D70EE" stroke-width="10" stroke-linecap="round"/>
+<path d="M32.4 48.7c1.7-11 8.5-17.7 18.8-20.4" fill="none" stroke="url(#ray)" stroke-width="10" stroke-linecap="round"/>
+<circle cx="52" cy="14" r="5.2" fill="#FFB77C"/>
+</svg>
