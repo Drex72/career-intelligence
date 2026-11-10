@@ -7,6 +7,7 @@ import {validEnvelope,MAX_BODY_BYTES,MAX_ATS_JOBS_PER_BOARD,MAX_REVIEWS_PER_RUN,
 import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
 import {candidateBoards} from './candidates.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription} from './eligibility.mjs';
+import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
 const response=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
@@ -71,7 +72,7 @@ Deno.serve(async (request:Request)=>{
   if(!authorized)return response(401,{error:'Invalid or replayed signed request'});
 
   let runID:string|undefined;
-  const report={remotive:0,ats_jobs:0,reviewed:0,candidates:0,
+  const report={remotive:0,ats_jobs:0,reviewed:0,candidates:0,matched:0,
     attempts:0,failures:0};
   try{
     const run=checked(await db.from('ci_worker_runs')
@@ -177,6 +178,48 @@ Deno.serve(async (request:Request)=>{
         });
         if(wrote.error||!wrote.data)report.failures++;else report.reviewed++;
       }catch{report.failures++;}
+    }
+    // Only approved, matching-safe Obsidian knowledge can unlock matching tasks.
+    // A missing vault leaves the workflow awaiting approval rather than inventing skills.
+    const documents=rows(checked(await db.from('ci_knowledge_documents')
+      .select('id,path,git_sha,content_sha,visibility')
+      .eq('status','approved').in('visibility',['matching-safe','agents-safe'])
+      .order('path').limit(50)));
+    if(documents.length){
+      const versionResult=await db.from('ci_knowledge_versions')
+        .select('document_id,revision,body')
+        .in('document_id',documents.map(d=>d.id))
+        .in('revision',documents.map(d=>d.git_sha)).limit(150);
+      if(versionResult.error)throw new Error('approved knowledge revision retrieval failed');
+      const versions=rows(versionResult.data);
+      const approved=documents.flatMap(d=>{
+        const version=versions.find(v=>v.document_id===d.id&&v.revision===d.git_sha);
+        return version&&typeof version.body==='string'&&version.body.trim()
+          ?[{path:d.path,content_sha:d.content_sha,body:version.body.slice(0,8000)}]:[];
+      });
+      if(approved.length){
+        checked(await db.rpc('ci_refresh_verified_handoffs',{p_limit:20}));
+        const revision=await approvedRevision(approved);
+        const tasks=rows(checked(await db.from('ci_workflow_tasks')
+          .select('id,input_ref').eq('task_type','matching').eq('state','pending')
+          .order('created_at').limit(3)));
+        for(const task of tasks){
+          const input=String(task.input_ref||'');
+          const jobId=input.startsWith('job:')?input.slice(4):'';
+          if(!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(jobId))continue;
+          const job=checked(await db.from('ci_jobs').select('id,title,remote_text,status')
+            .eq('id',jobId).maybeSingle());
+          if(!job||job.status!=='open')continue;
+          const result=scoreApprovedMatch(job.title,job.remote_text,approved.map(d=>d.body));
+          if(!result)continue;
+          const completed=await db.rpc('ci_record_verified_match',{
+            p_job_id:job.id,p_revision:revision,p_score:result.score,
+            p_matched:result.matched,p_gaps:result.gaps
+          });
+          if(completed.error)report.failures++;
+          else if(completed.data)report.matched++;
+        }
+      }
     }
     checked(await db.from('ci_worker_runs').update({
       finished_at:new Date().toISOString(),
