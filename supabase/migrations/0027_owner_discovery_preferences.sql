@@ -110,6 +110,6 @@ end;
 $match$;
 
 revoke all on function ci_save_discovery_preferences(uuid,integer,text[],text[],text[],text),
-  function ci_job_matches_preferences(uuid,uuid) from public,anon,authenticated;
+  ci_job_matches_preferences(uuid,uuid) from public,anon,authenticated;
 grant execute on function ci_save_discovery_preferences(uuid,integer,text[],text[],text[],text),
-  function ci_job_matches_preferences(uuid,uuid) to service_role;
+  ci_job_matches_preferences(uuid,uuid) to service_role;
