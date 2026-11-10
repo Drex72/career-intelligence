@@ -14,7 +14,12 @@ type Readiness={
   recent_confirmed_publication:number,eligibility_assessments:number,
   eligibility_evidence:number,active_ats_boards:number,pending_source_candidates:number
 };
-type Operations={states:Record<string,number>,delivery?:{date:string,state:string,delivered:number,target:number}|null,workerRuns?:WorkerRun[],readiness?:Readiness};
+type Integrity={integrity_ok:boolean;integrity_violations:number;generation_ready:boolean;checked_at:string;
+ daily_target:number;eligible_undelivered_jobs_now:number;approved_knowledge_documents:number;
+ jobs_missing_sources:number;duplicate_source_ids:number;duplicate_canonical_jobs:number;
+ invalid_apply_urls:number;verified_assessments_without_evidence:number;
+ delivered_without_any_verified_assessment:number;delivered_jobs:number;};
+type Operations={states:Record<string,number>,delivery?:{date:string,state:string,delivered:number,target:number}|null,workerRuns?:WorkerRun[],readiness?:Readiness,integrity?:Integrity};
 type Source={id:string,name:string,state:string,config:{provider:string,slug:string,company_name:string}};
 type Candidate={id:string,provider:string,board_slug:string,company_name:string,evidence_url:string,state:string};
 type QueueItem={job_id:string,title:string,company_name:string,apply_url:string|null,first_queued_at:string};
@@ -117,6 +122,35 @@ export default function Operations(){
             </div>}
         </div>:
         <p className="muted">Pipeline health appears after the next successful authenticated API refresh.</p>}
+    </section>
+    <section className="workspace-surface" aria-labelledby="integrity-heading">
+      <div className="section-title"><div><h2 id="integrity-heading">Production integrity audit</h2>
+        <p className="muted">Read-only checks against real database records. Passing checks do not imply that suitable jobs exist.</p>
+      </div></div>
+      {tasks.data?.integrity?<div>
+        <p role="status"><strong>{tasks.data.integrity.integrity_ok?'No integrity violations detected':'Integrity violations detected'}</strong>
+          {' · '+tasks.data.integrity.integrity_violations+' problems · Audited '+new Date(tasks.data.integrity.checked_at).toLocaleString()}</p>
+        <div className="metric-grid">
+          <div className="metric"><span>Configured daily target</span><strong>{tasks.data.integrity.daily_target}</strong></div>
+          <div className="metric"><span>Currently qualified, undelivered jobs</span><strong>{tasks.data.integrity.eligible_undelivered_jobs_now}</strong></div>
+          <div className="metric"><span>Approved knowledge notes</span><strong>{tasks.data.integrity.approved_knowledge_documents}</strong></div>
+          <div className="metric"><span>Delivered jobs</span><strong>{tasks.data.integrity.delivered_jobs}</strong></div>
+        </div>
+        {!tasks.data.integrity.generation_ready&&<p className="muted">Generation is not yet ready: either qualifying evidence is missing or the integrity checks failed.</p>}
+        <div className="guidance-surface">
+          <h3>Data consistency checks</h3>
+          <ul>
+            {([
+              ['Jobs missing source records',tasks.data.integrity.jobs_missing_sources],
+              ['Duplicate source identifiers',tasks.data.integrity.duplicate_source_ids],
+              ['Duplicate canonical job records',tasks.data.integrity.duplicate_canonical_jobs],
+              ['Invalid application links',tasks.data.integrity.invalid_apply_urls],
+              ['Verified assessments without evidence',tasks.data.integrity.verified_assessments_without_evidence],
+              ['Delivered jobs without verification history',tasks.data.integrity.delivered_without_any_verified_assessment],
+            ] as const).map(([label,count])=><li key={label}>{label}: <strong>{count}</strong></li>)}
+          </ul>
+        </div>
+      </div>:<p className="muted">Integrity audit data is not available from the current API deployment.</p>}
     </section>
     <div className="operations-overview-grid"><section className="workspace-surface">
       <div className="section-title"><div><h2>Daily recommendations</h2>
