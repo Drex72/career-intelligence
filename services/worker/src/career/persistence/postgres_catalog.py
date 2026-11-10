@@ -270,11 +270,11 @@ class PostgresCareerCatalog:
 
     def list_contacts(self, limit: int = 100) -> list[dict]:
         if not 1<=limit<=500:raise ValueError('limit must be 1..500')
-        rows=self.conn.execute("""SELECT p.id,p.name,p.current_title,p.profile_url,
+        rows=self.conn.execute("""SELECT p.id,p.name,p.current_title,p.profile_url,p.company_id,
           p.identity_verified,c.legal_name AS company_name
           FROM ci_contacts p JOIN ci_companies c ON c.id=p.company_id
           ORDER BY p.created_at DESC LIMIT %s""",(limit,)).fetchall()
-        return [{**dict(x),'id':str(x['id'])} for x in rows]
+        return [{**dict(x),'id':str(x['id']),'company_id':str(x['company_id'])} for x in rows]
 
     def list_knowledge_index(self) -> list[dict]:
         rows=self.conn.execute("""SELECT path,visibility,git_sha,content_sha,updated_at
