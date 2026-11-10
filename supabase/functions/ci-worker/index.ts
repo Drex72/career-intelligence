@@ -139,8 +139,9 @@ Deno.serve(async (request:Request)=>{
     // Deterministic official evidence checks; never infer Nigeria from "remote" alone.
     const queue=rows(checked(await db.from('ci_eligibility_review_queue')
       .select('job_id').eq('state','pending').order('first_queued_at').limit(8)));
+    let reviewAttempts=0;
     for(const item of queue){
-      if(report.reviewed>=MAX_REVIEWS_PER_RUN)break;
+      if(reviewAttempts>=MAX_REVIEWS_PER_RUN)break;
       const sources=rows(checked(await db.from('ci_job_sources')
         .select('source_name,source_job_id,source_url').eq('job_id',item.job_id)
         .in('source_name',['greenhouse','lever','ashby']).limit(5)));
@@ -162,6 +163,7 @@ Deno.serve(async (request:Request)=>{
       if(!chosen)continue;
       const claimed=await db.rpc('ci_claim_job_review_slot',{p_job_id:item.job_id});
       if(claimed.error||!claimed.data)continue;
+      reviewAttempts++;
       report.attempts++;
       try{
         const payload=cached.get(chosen.key)??await fetchJSON(boardEndpoint(chosen.provider,chosen.slug));
