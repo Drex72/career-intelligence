@@ -65,3 +65,9 @@ test('outreach only authorizes and queues, never sends via public API',()=>{
   assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/outreach/approve','GET'),null);
   assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/outreach/send','POST'),null);
 });
+
+test('revocation requires a POST and never exposes Gmail transport',()=>{
+  assert.deepEqual(route('https://localhost/functions/v1/ci-api/api/ci/outreach/revoke','POST'),{type:'revokeOutreach'});
+  assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/outreach/revoke','GET'),null);
+  assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/outreach/send','POST'),null);
+});

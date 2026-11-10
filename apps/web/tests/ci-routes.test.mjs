@@ -55,3 +55,9 @@ test('outreach approval and durable intent creation are POST-only, never send',(
   assert.equal(safePath(['outreach','intents'],'GET'),null);
   assert.equal(safePath(['outreach','send'],'POST'),null);
 });
+
+test('revocation is POST-only and never creates an email send route',()=>{
+  assert.equal(safePath(['outreach','revoke'],'POST'),'outreach/revoke');
+  assert.equal(safePath(['outreach','revoke'],'GET'),null);
+  assert.equal(safePath(['outreach','send'],'POST'),null);
+});
