@@ -2,6 +2,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.119.0';
 import {route,isUuid,validApplication,validDraft,validReply,classifyReply,roleRestricted} from './policy.mjs';
 import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
+import {classifyOfficialPosting,findOfficialJob,postingDescription} from './eligibility.mjs';
 
 const baseHeaders = {'content-type':'application/json; charset=utf-8','cache-control':'no-store, max-age=0','x-content-type-options':'nosniff'};
 const reply=(status:number,payload:unknown)=>new Response(JSON.stringify(payload),{status,headers:baseHeaders});
@@ -240,6 +241,57 @@ Deno.serve(async (request:Request)=>{
       return reply(200,{source:source.config.provider,board:source.config.slug,
         processed,rejected,available:jobs.length,
         note:'Official public ATS listings were recorded and queued for eligibility review. None was automatically deemed eligible for Nigeria.'});
+    }
+    if(operation.type==='reviewEligibility'){
+      if(!body||!isUuid(body.job_id))return reply(422,{error:'Valid job UUID required'});
+      const q=check(await db.from('ci_eligibility_review_queue')
+        .select('job_id,state').eq('job_id',body.job_id).maybeSingle());
+      if(!q||q.state!=='pending')return reply(404,{error:'Job is not pending official ATS review'});
+      const sources=list(check(await db.from('ci_job_sources')
+        .select('source_name,source_job_id,source_url').eq('job_id',body.job_id)
+        .in('source_name',['greenhouse','lever','ashby']).order('retrieved_at',{ascending:false}).limit(5)));
+      let match=null;
+      for(const source of sources){
+        const provider=source.source_name;
+        if(!source.source_job_id || !['greenhouse','lever','ashby'].includes(provider))continue;
+        const boardList=list(check(await db.from('ci_discovery_sources')
+          .select('config').eq('kind','ats').eq('state','active')
+          .eq('name','ats:'+provider+':'+source.source_job_id.split(':')[0]).limit(1)));
+        const config=boardList[0]?.config;
+        if(!config||!validBoard({provider:config.provider,slug:config.slug,company:config.company_name}))continue;
+        const sourceId=source.source_job_id.slice(config.slug.length+1);
+        if(source.source_job_id!==config.slug+':'+sourceId || !/^[A-Za-z0-9_-]{1,150}$/.test(sourceId))continue;
+        match={provider,slug:config.slug,sourceId,sourceURL:source.source_url};
+        break;
+      }
+      if(!match)return reply(422,{error:'No matching registered public ATS source for this job'});
+      const gate=check(await db.rpc('ci_claim_job_review_slot',{p_job_id:body.job_id}));
+      if(!gate)return reply(429,{error:'This job can be researched once every six hours'});
+      let payload:any;
+      try{
+        const response=await fetch(boardEndpoint(match.provider,match.slug),{
+          headers:{'accept':'application/json','user-agent':'CareerIntelligenceResearch/0.6'},
+          redirect:'error',signal:AbortSignal.timeout(12000)
+        });
+        if(!response.ok)return reply(502,{error:'Official ATS source unavailable'});
+        if(Number(response.headers.get('content-length')||0)>2_000_000)
+          return reply(502,{error:'ATS response too large'});
+        const raw=await response.text();
+        if(raw.length>2_000_000)return reply(502,{error:'ATS response too large'});
+        payload=JSON.parse(raw);
+      }catch{return reply(502,{error:'Official ATS source temporarily unavailable'});}
+      const official=findOfficialJob(payload,match.provider,match.sourceId);
+      if(!official)return reply(404,{error:'Posting not found in current official ATS feed'});
+      const decision=classifyOfficialPosting(postingDescription(official,match.provider));
+      const recorded=check(await db.rpc('ci_record_ats_review',{
+        p_job_id:body.job_id,p_source_url:match.sourceURL,
+        p_status:decision.status,p_confidence:decision.confidence,
+        p_excerpt:decision.excerpt,p_reason:decision.reason
+      }));
+      if(!recorded)return reply(409,{error:'Current verified assessment already exists or evidence was invalid'});
+      return reply(200,{job_id:body.job_id,status:decision.status,confidence:decision.confidence,
+        reason:decision.reason,
+        note:'Only explicit official role-level evidence can verify Nigerian hiring eligibility. Worldwide remote wording is not sufficient.'});
     }
     if(operation.type==='application'){
       if(!validApplication(body))return reply(422,{detail:'Invalid application input'});
