@@ -67,6 +67,8 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_postgres_himalayas.py -v
       - name: Verify saved owner discovery preferences and evidence-required generation
         run: python -m pytest services/worker/tests/integration/test_postgres_discovery_preferences.py -v
+      - name: Verify official ATS work mode and sponsorship evidence
+        run: python -m pytest services/worker/tests/integration/test_postgres_work_facts.py -v
       - name: Verify source registry migration and board metadata
         run: python -m pytest services/worker/tests/integration/test_postgres_sources.py -v
       - name: Verify versioned private knowledge ingestion
