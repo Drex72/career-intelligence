@@ -20,6 +20,9 @@ export function route(url, method) {
   if (method === 'POST' && path === 'batches/generate') return {type:'generateBatch'};
   if (method === 'POST' && path === 'applications') return {type:'application'};
   if (method === 'POST' && path === 'outreach/drafts') return {type:'draft'};
+  if (method === 'POST' && path === 'outreach/approve') return {type:'approveOutreach'};
+  if (method === 'POST' && path === 'outreach/intents') return {type:'prepareOutreachIntent'};
+  if (method === 'POST' && path === 'outreach/revoke') return {type:'revokeOutreach'};
   if (method === 'POST' && path === 'conversations') return {type:'conversation'};
   return null;
 }

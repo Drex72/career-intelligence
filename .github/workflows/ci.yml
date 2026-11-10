@@ -75,6 +75,8 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_postgres_outreach.py -v
       - name: Verify reply intelligence and per-role evidence
         run: python -m pytest services/worker/tests/integration/test_postgres_conversation.py -v
+      - name: Verify PostgreSQL outreach approvals and no-send intent ledger
+        run: python -m pytest services/worker/tests/integration/test_postgres_outreach_authorization.py -v
       - name: Exercise six-role LangGraph routing and checkpoints
         run: python -m pytest services/worker/tests/integration/test_langgraph_runtime.py -v
   web-tests:

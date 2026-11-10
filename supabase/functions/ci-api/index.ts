@@ -135,7 +135,20 @@ Deno.serve(async (request:Request)=>{
         const xs=list(check(await db.from('ci_applications').select('id,job_id,status,applied_at,notes,ci_jobs(title,apply_url),ci_companies(legal_name)').eq('owner_user_id',owner).order('applied_at',{ascending:false,nullsFirst:false}).limit(500)));
         return reply(200,{applications:xs.map((x:any)=>({id:x.id,job_id:x.job_id,status:x.status,applied_at:x.applied_at,notes:x.notes,title:x.ci_jobs?.title||'',apply_url:x.ci_jobs?.apply_url||'',company_name:x.ci_companies?.legal_name||''}))});
       }
-      if(path==='outreach')return reply(200,{drafts:list(check(await db.from('ci_outreach_drafts').select('id,job_id,contact_id,subject,body,status,created_at').eq('owner_user_id',owner).order('created_at',{ascending:false}).limit(100)))});
+      if(path==='outreach'){
+        const drafts=list(check(await db.from('ci_outreach_drafts')
+          .select('id,job_id,contact_id,subject,body,status,created_at')
+          .eq('owner_user_id',owner).order('created_at',{ascending:false}).limit(100)));
+        if(!drafts.length)return reply(200,{drafts:[],intents:[],approvals:[]});
+        const ids=drafts.map((d:any)=>d.id);
+        const [outbound,active]=await Promise.all([
+          db.from('ci_outbound_messages').select('id,draft_id,status,created_at,sent_at,last_attempt_at,error_code')
+            .in('draft_id',ids).order('created_at',{ascending:false}).limit(100),
+          db.from('ci_outreach_approvals').select('draft_id,mode,approved_at')
+            .eq('owner_user_id',owner).is('revoked_at',null).in('draft_id',ids).limit(100),
+        ]);
+        return reply(200,{drafts,intents:list(check(outbound)),approvals:list(check(active))});
+      }
       if(path==='conversations'){
         const xs=list(check(await db.from('ci_conversation_events').select('id,event_type,occurred_at,evidence,ci_jobs(title,ci_companies(legal_name)),ci_contacts(name)').eq('owner_user_id',owner).order('occurred_at',{ascending:false}).limit(100)));
         return reply(200,{events:xs.map((x:any)=>({id:x.id,event_type:x.event_type,occurred_at:x.occurred_at,evidence:x.evidence,title:x.ci_jobs?.title||'',company_name:x.ci_jobs?.ci_companies?.legal_name||'',contact_name:x.ci_contacts?.name||''}))});
@@ -371,6 +384,40 @@ Deno.serve(async (request:Request)=>{
       if(!j)return reply(404,{detail:'Job not found'});
       const record=check(await db.from('ci_applications').upsert({owner_user_id:owner,company_id:j.company_id,job_id:body.job_id,status:body.status,notes:body.notes||'',applied_at:body.status==='applied'?new Date().toISOString():null},{onConflict:'owner_user_id,job_id'}).select('id').single());
       return reply(200,{id:record.id});
+    }
+    if(operation.type==='approveOutreach'){
+      if(!body || !isUuid(body.draft_id) || !['manual','standing'].includes(body.mode))
+        return reply(422,{error:'Valid draft UUID and approval mode required'});
+      const accepted=check(await db.rpc('ci_approve_outreach_draft',{
+        p_owner:owner,p_draft:body.draft_id,p_mode:body.mode
+      }));
+      if(!accepted)return reply(409,{error:'Approval blocked: verify application, recipient, eligibility, suppression and policy'});
+      return reply(200,{approved:true,draft_id:body.draft_id,mode:body.mode,
+        note:'Approval recorded. No email has been sent.'});
+    }
+    if(operation.type==='revokeOutreach'){
+      if(!body || !isUuid(body.draft_id))
+        return reply(422,{error:'Valid draft UUID required'});
+      const status=check(await db.rpc('ci_revoke_outreach_approval',{
+        p_owner:owner,p_draft:body.draft_id
+      }));
+      if(status==='not_found')return reply(404,{error:'Outreach draft not found'});
+      return reply(200,{draft_id:body.draft_id,status,
+        note:status==='reconciliation_required'
+          ?'A prior provider attempt has uncertain status and requires manual reconciliation. No retry will be attempted.'
+          :status==='already_sent'
+          ?'Approval revoked, but an already-sent email cannot be recalled.'
+          :'Approval revoked and unsent pending intents cancelled.'});
+    }
+    if(operation.type==='prepareOutreachIntent'){
+      if(!body || !isUuid(body.draft_id))
+        return reply(422,{error:'Valid draft UUID required'});
+      const intentId=check(await db.rpc('ci_prepare_outreach_intent',{
+        p_owner:owner,p_draft:body.draft_id
+      }));
+      if(!intentId)return reply(409,{error:'Not eligible for queuing: approval, application, recipient, suppression or quota restriction'});
+      return reply(200,{id:intentId,status:'pending',provider:'gmail',
+        note:'A durable pending intent has been recorded. Sending is disabled until the Gmail dispatcher is connected and authorized.'});
     }
     if(operation.type==='draft'){
       if(!validDraft(body))return reply(422,{detail:'Invalid draft input'});

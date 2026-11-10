@@ -47,3 +47,17 @@ test('unverified source candidates require owner approval POST',()=>{
  assert.equal(safePath(['source-candidates','decision'],'POST'),'source-candidates/decision');
  assert.equal(safePath(['source-candidates','decision'],'GET'),null);
 });
+
+test('outreach approval and durable intent creation are POST-only, never send',()=>{
+  assert.equal(safePath(['outreach','approve'],'POST'),'outreach/approve');
+  assert.equal(safePath(['outreach','intents'],'POST'),'outreach/intents');
+  assert.equal(safePath(['outreach','approve'],'GET'),null);
+  assert.equal(safePath(['outreach','intents'],'GET'),null);
+  assert.equal(safePath(['outreach','send'],'POST'),null);
+});
+
+test('revocation is POST-only and never creates an email send route',()=>{
+  assert.equal(safePath(['outreach','revoke'],'POST'),'outreach/revoke');
+  assert.equal(safePath(['outreach','revoke'],'GET'),null);
+  assert.equal(safePath(['outreach','send'],'POST'),null);
+});
