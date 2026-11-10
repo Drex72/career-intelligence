@@ -114,7 +114,10 @@ Deno.serve(async (request:Request)=>{
           delivery={date:batch.local_date,state:batch.state,
             delivered:items.count??0,target:batch.target};
         }
-        return reply(200,{states:counts,delivery});
+        const workerRuns=list(check(await db.from('ci_worker_runs')
+          .select('started_at,finished_at,state,details')
+          .order('started_at',{ascending:false}).limit(10)));
+        return reply(200,{states:counts,delivery,workerRuns});
       }
     }
     if(operation.type==='batch'){

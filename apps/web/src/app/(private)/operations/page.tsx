@@ -5,7 +5,8 @@ import {useCareerSession} from '@/components/AuthGate';
 import {ciFetch} from '@/lib/api';
 import {StateNotice} from '@/components/ResourceTable';
 
-type Operations={states:Record<string,number>,delivery?:{date:string,state:string,delivered:number,target:number}|null};
+type WorkerRun={started_at:string,finished_at:string|null,state:string,details:Record<string,number>};
+type Operations={states:Record<string,number>,delivery?:{date:string,state:string,delivered:number,target:number}|null,workerRuns?:WorkerRun[]};
 type Source={id:string,name:string,state:string,config:{provider:string,slug:string,company_name:string}};
 type Candidate={id:string,provider:string,board_slug:string,company_name:string,evidence_url:string,state:string};
 type QueueItem={job_id:string,title:string,company_name:string,apply_url:string|null,first_queued_at:string};
@@ -90,6 +91,15 @@ export default function Operations(){
       {tasks.data?.delivery?
         <p className="muted">Latest batch: {tasks.data.delivery.date} · {tasks.data.delivery.delivered} of {tasks.data.delivery.target} employers · {tasks.data.delivery.state}</p>:
         <p className="muted">No daily delivery batch has been generated yet.</p>}
+    </section>
+    <section className="panel">
+      <div className="section-title"><div><h2>Unattended discovery worker</h2>
+        <p className="muted">Authenticated scheduled runs. Public-source research and eligibility checks only; no emails or simulated metrics.</p></div></div>
+      {(tasks.data?.workerRuns||[]).map((run,i)=><div className="section-title" key={i}>
+        <div><strong>{run.state}</strong><p className="muted">{new Date(run.started_at).toLocaleString()}</p></div>
+        <p className="muted">Feed jobs {run.details?.remotive??0} · ATS jobs {run.details?.ats_jobs??0} · Reviews {run.details?.reviewed??0} · Source candidates {run.details?.candidates??0} · Failures {run.details?.failures??0}</p>
+      </div>)}
+      {tasks.data?.workerRuns?.length===0&&<p className="muted">No scheduled worker runs recorded yet.</p>}
     </section>
     <section className="panel">
       <div className="section-title"><div><h2>Public ATS boards</h2>
