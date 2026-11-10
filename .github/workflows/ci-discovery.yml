@@ -1,0 +1,48 @@
+name: Career Intelligence Scheduled Discovery (opt-in)
+on:
+  schedule:
+    - cron: '15 6,12,18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: career-intelligence-daily-discovery
+  cancel-in-progress: false
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI_AUTO_RUN: ${{ vars.CI_AUTO_RUN }}
+      DATABASE_URL: ${{ secrets.CI_DATABASE_URL }}
+      CAREER_OWNER_UUID: ${{ secrets.CI_OWNER_UUID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check opt-in and private runtime configuration
+        id: gate
+        shell: bash
+        run: |
+          if [[ "$CI_AUTO_RUN" == "true" && -n "$DATABASE_URL" && -n "$CAREER_OWNER_UUID" ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Skipping scheduled discovery: CI_AUTO_RUN must be true, and CI_DATABASE_URL and CI_OWNER_UUID configured.'
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install bounded worker
+        if: steps.gate.outputs.enabled == 'true'
+        run: python -m pip install -e 'services/worker[agents]'
+      - name: Discover and research eligible opportunities
+        if: steps.gate.outputs.enabled == 'true'
+        run: python -m career.cli pg-discover --terms 'backend engineer,software engineer' --board-limit 10 --eligibility-limit 30
+      - name: Research public employees for verified eligible companies
+        if: steps.gate.outputs.enabled == 'true'
+        run: python -m career.cli pg-research-people --limit 10
+      - name: Rank eligible roles from approved knowledge
+        if: steps.gate.outputs.enabled == 'true'
+        run: python -m career.cli pg-rank --limit 100
+      - name: Generate lifetime-deduplicated daily batch
+        if: steps.gate.outputs.enabled == 'true'
+        run: python -m career.cli pg-generate-batch --owner-uuid "$CAREER_OWNER_UUID" --target 100

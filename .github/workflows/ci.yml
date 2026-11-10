@@ -1,0 +1,84 @@
+name: Python and PostgreSQL Tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install worker and tests
+        run: python -m pip install -e 'services/worker[test]'
+      - name: Run offline contract, unit and local integration tests
+        run: python -m pytest services/worker/tests -q
+  postgres-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: career_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d career_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PG_TEST_DSN: postgresql://postgres:postgres@localhost:5432/career_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install worker and PostgreSQL test driver
+        run: python -m pip install -e 'services/worker[test,agents]'
+      - name: Apply migrations to disposable database
+        run: python -m pytest services/worker/tests/integration/test_postgres_migrations.py -v
+      - name: Exercise PostgreSQL worker ledger
+        run: python -m pytest services/worker/tests/system/test_postgres_ledger.py -v
+      - name: Verify PostgreSQL company/job catalog and lifetime deliveries
+        run: python -m pytest services/worker/tests/integration/test_postgres_catalog.py -v
+      - name: Verify source registry migration and board metadata
+        run: python -m pytest services/worker/tests/integration/test_postgres_sources.py -v
+      - name: Verify versioned private knowledge ingestion
+        run: python -m pytest services/worker/tests/integration/test_postgres_knowledge.py -v
+      - name: Verify knowledge-aware PostgreSQL role ranking
+        run: python -m pytest services/worker/tests/integration/test_postgres_matching.py -v
+      - name: Verify draft-only owner-gated PostgreSQL outreach
+        run: python -m pytest services/worker/tests/integration/test_postgres_outreach.py -v
+      - name: Verify reply intelligence and per-role evidence
+        run: python -m pytest services/worker/tests/integration/test_postgres_conversation.py -v
+      - name: Exercise six-role LangGraph routing and checkpoints
+        run: python -m pytest services/worker/tests/integration/test_langgraph_runtime.py -v
+  web-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned dashboard dependencies
+        working-directory: apps/web
+        run: npm ci --no-audit --no-fund
+      - name: Run dashboard behavior tests
+        working-directory: apps/web
+        run: npm test
+      - name: Check dashboard TypeScript
+        working-directory: apps/web
+        run: npm run typecheck
+      - name: Build Next.js dashboard
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://test.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-public-test-key
+          CI_BACKEND_URL: http://127.0.0.1:8000
+        run: npm run build
