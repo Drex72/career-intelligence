@@ -6,6 +6,7 @@ import {ciFetch} from '@/lib/api';
 import {ResourceTable,StateNotice,Status} from '@/components/ResourceTable';
 import {PageHeading,SectionHeading,Notice} from '@/components/WorkspaceUI';
 import {safeDateLabel} from '@/lib/data.mjs';
+import {filterOpportunities} from '@/lib/opportunity-filters.mjs';
 type Job={id:string;company_name:string;title:string;published_at:string|null;eligibility:string|null;match_score:number;apply_url:string;source?:string};
 type Source={source_name:string;source_url:string;retrieved_at:string};
 type Evidence={source_url:string;source_kind:string;excerpt:string;observed_at:string;claim:string};
@@ -59,10 +60,7 @@ export default function Opportunities(){
     }
   }
   const jobs=data?.jobs||[];
-  const filtered=jobs.filter(j=>{
-    const matches=(j.company_name+' '+j.title).toLowerCase().includes(search.trim().toLowerCase());
-    return matches&&(filter==='all'||(filter==='unverified'?(!j.eligibility||!['verified_eligible','likely_eligible','ineligible'].includes(j.eligibility)):j.eligibility===filter));
-  });
+  const filtered=filterOpportunities(jobs,search,filter);
   const selectedJob=jobs.find(j=>j.id===selected);
   return <div className="opportunity-page">
     <PageHeading meta="DISCOVER / EVALUATE" title="Find your next opportunity." description="Research employers, compare roles, and verify hiring eligibility before you apply."
