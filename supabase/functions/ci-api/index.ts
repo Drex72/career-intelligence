@@ -85,6 +85,17 @@ Deno.serve(async (request:Request)=>{
       const xs=list(check(await db.from('ci_daily_batch_items').select('job_id,company_id,rank,ci_jobs(title,apply_url,published_at),ci_companies(legal_name)').eq('batch_id',bs[0].id).order('rank').limit(100)));
       return reply(200,{items:xs.map((x:any)=>({job_id:x.job_id,company_id:x.company_id,rank:x.rank,title:x.ci_jobs?.title||'',apply_url:x.ci_jobs?.apply_url||'',published_at:x.ci_jobs?.published_at||null,company_name:x.ci_companies?.legal_name||''}))});
     }
+    if(operation.type==='evidence'){
+      const job=check(await db.from('ci_jobs').select('id,title,apply_url,status,company_id').eq('id',operation.jobId).maybeSingle());
+      if(!job)return reply(404,{error:'Job not found'});
+      const [assessments,evidence,sources]=await Promise.all([
+        db.from('ci_eligibility_assessments').select('id,status,confidence,reasons,contradictions,policy_version,assessed_at,expires_at').eq('job_id',job.id).order('assessed_at',{ascending:false}).limit(20),
+        db.from('ci_eligibility_evidence').select('id,source_url,source_kind,excerpt,observed_at,scope,claim,confidence').eq('job_id',job.id).order('observed_at',{ascending:false}).limit(30),
+        db.from('ci_job_sources').select('source_name,source_url,retrieved_at').eq('job_id',job.id).order('retrieved_at',{ascending:false}).limit(20),
+      ]);
+      return reply(200,{job,assessments:list(check(assessments)),evidence:list(check(evidence)),sources:list(check(sources)),
+        note:'Eligibility is only verified when current, authoritative employer evidence supports the specific role. A remote label is not proof of Nigeria eligibility.'});
+    }
     if(operation.type==='discover'){
       // Remotive's public API asks clients to limit requests to four/day and attribute source.
       // This is an owner-initiated, bounded ingestion. Listings remain unverified.
