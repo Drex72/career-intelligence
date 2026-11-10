@@ -14,6 +14,8 @@ test('preserves Himalayas original application link and official source',()=>{
  assert.equal(x.length,1);
  assert.equal(x[0].applicationLink,original);
  assert.equal(x[0].guid,'https://himalayas.app/companies/example/jobs/backend-engineer');
+ assert.equal(x[0].lastUpdatedAt,new Date(stamp).toISOString());
+ assert.equal('publishedAt' in x[0],false);
  assert.match(x[0].locations,/NG/);
  assert.equal('eligibility' in x[0],false);
 });
