@@ -33,7 +33,7 @@ create or replace function ci_ingest_ats_job(
   p_company text, p_title text, p_url text,
   p_published_at timestamptz, p_remote_text text
 ) returns uuid language plpgsql security invoker set search_path=public as $$
-declare company_id uuid; v_job_id uuid; source_url_ok boolean;
+declare v_company_id uuid; v_job_id uuid; source_url_ok boolean;
 begin
   if p_provider not in ('greenhouse','lever','ashby') or
      p_board is null or p_board !~ '^[A-Za-z0-9_-]{1,100}$' or
@@ -52,18 +52,18 @@ begin
     when 'ashby' then left(p_url,length('https://jobs.ashbyhq.com/'||p_board||'/'))='https://jobs.ashbyhq.com/'||p_board||'/'
     else false end;
   if not source_url_ok or p_url~'[?#]' then return null; end if;
-  select id into company_id from ci_companies where canonical_domain is null
+  select id into v_company_id from ci_companies where canonical_domain is null
     and normalized_name=lower(trim(p_company)) limit 1;
-  if company_id is null then
+  if v_company_id is null then
     insert into ci_companies(normalized_name,legal_name,identity_confidence)
       values(lower(trim(p_company)),trim(p_company),'unverified')
     on conflict ((lower(normalized_name))) where canonical_domain is null
       do update set legal_name=excluded.legal_name
-    returning id into company_id;
+    returning id into v_company_id;
   end if;
   insert into ci_jobs(company_id,title,apply_url,canonical_apply_url,
     status,published_at,timestamp_source,timestamp_confidence,remote_text,last_verified_at)
-  values(company_id,trim(p_title),p_url,p_url,'open',p_published_at,
+  values(v_company_id,trim(p_title),p_url,p_url,'open',p_published_at,
     case when p_published_at is null then 'unknown' else p_provider end,
     case when p_published_at is null then 'unknown' else 'authoritative' end,
     left(coalesce(p_remote_text,''),500),now())
