@@ -30,7 +30,8 @@ export function normalizeHimalayas(payload,now=Date.now()){
       guid:source.origin+source.pathname,
       company,title,
       applicationLink:String(raw.applicationLink), // exact provider-supplied URL
-      publishedAt:new Date(publishedMs).toISOString(),
+      // pubDate is a provider update timestamp, not verified first publication.
+      lastUpdatedAt:new Date(publishedMs).toISOString(),
       locations:restrictions.length?'Location restrictions: '+restrictions.join(', '):'Restrictions not verified',
       // Used only for extracting bounded human-reviewable ATS links. Never render raw HTML.
       description:String(raw?.description||'').slice(0,30000)
