@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeHimalayas} from './himalayas.mjs';
+import {normalizeHimalayas,safeHimalayasCursor} from './himalayas.mjs';
+import {candidateBoards} from './candidates.mjs';
 const stamp=Date.parse('2026-11-10T12:00:00Z');
 test('preserves Himalayas original application link and official source',()=>{
  const original='https://boards.greenhouse.io/example/jobs/123?gh_src=himalayas';
@@ -31,4 +32,25 @@ test('unknown or missing publish date is not fabricated',()=>{
   applicationLink:'https://example.com/job',guid:'https://himalayas.app/companies/xyz/jobs/python'}]},stamp);
  assert.equal(x.length,0);
  assert.throws(()=>normalizeHimalayas({},stamp));
+});
+
+test('description links can propose ATS boards even when Himalayas application URL is tracked',()=>{
+ const x=normalizeHimalayas({jobs:[{
+   guid:'https://himalayas.app/companies/example/jobs/platform-engineer',
+   companyName:'Example Software',title:'Platform Engineer',
+   applicationLink:'https://himalayas.app/companies/example/jobs/platform-engineer?utm_source=api',
+   description:'<p>Apply through <a href="https://jobs.ashbyhq.com/example/role-1">our board</a>.</p>',
+   pubDate:Math.floor(stamp/1000)
+ }]},stamp);
+ assert.equal(x.length,1);
+ assert.equal(x[0].applicationLink,'https://himalayas.app/companies/example/jobs/platform-engineer?utm_source=api');
+ assert.equal(candidateBoards(x[0].applicationLink+' '+x[0].description,x[0].company,x[0].guid)[0].provider,'ashby');
+});
+test('opaque cursor tokens are bounded and loop-safe',()=>{
+ const seen=new Set(['already-used']);
+ assert.equal(safeHimalayasCursor('next-token',seen),'next-token');
+ assert.equal(safeHimalayasCursor('already-used',seen),null);
+ assert.equal(safeHimalayasCursor('x'.repeat(513),seen),null);
+ assert.equal(safeHimalayasCursor(null,seen),null);
+ assert.equal(safeHimalayasCursor({malicious:true},seen),null);
 });

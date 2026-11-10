@@ -31,8 +31,16 @@ export function normalizeHimalayas(payload,now=Date.now()){
       company,title,
       applicationLink:String(raw.applicationLink), // exact provider-supplied URL
       publishedAt:new Date(publishedMs).toISOString(),
-      locations:restrictions.length?'Location restrictions: '+restrictions.join(', '):'Restrictions not verified'
+      locations:restrictions.length?'Location restrictions: '+restrictions.join(', '):'Restrictions not verified',
+      // Used only for extracting bounded human-reviewable ATS links. Never render raw HTML.
+      description:String(raw?.description||'').slice(0,30000)
     });
   }
   return result;
+}
+
+/** Cursor tokens are opaque. URL-encode; never turn provider data into request URLs. */
+export function safeHimalayasCursor(raw,seen=new Set()){
+  if(typeof raw!=='string'||raw.length===0||raw.length>512||seen.has(raw))return null;
+  return raw;
 }
