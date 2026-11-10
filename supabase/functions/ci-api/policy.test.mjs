@@ -27,3 +27,10 @@ test('conversations are conservative',()=>{
  assert.equal(classifyReply('We need US-only applicants'),'reply');
  assert.equal(roleRestricted('Must be based in the United States'),true);
 });
+
+test('evidence access is GET-only and validates job UUID',()=>{
+ const valid='f59015fd-927f-4cee-a023-0d9784e19171';
+ assert.deepEqual(route(`https://localhost/functions/v1/ci-api/api/ci/jobs/${valid}/evidence`,'GET'),{type:'evidence',jobId:valid});
+ assert.equal(route(`https://localhost/functions/v1/ci-api/api/ci/jobs/${valid}/evidence`,'POST'),null);
+ assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/jobs/invalid/evidence','GET'),null);
+});

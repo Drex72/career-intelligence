@@ -15,3 +15,10 @@ test('outbound send endpoints and arbitrary path segments remain blocked', () =>
     assert.equal(safePath(path,'POST'),null);
   }
 });
+
+test('job evidence route is read-only and requires UUID-shaped ID',()=>{
+ const id='f59015fd-927f-4cee-a023-0d9784e19171';
+ assert.equal(safePath(['jobs',id,'evidence'],'GET'),`jobs/${id}/evidence`);
+ assert.equal(safePath(['jobs',id,'evidence'],'POST'),null);
+ assert.equal(safePath(['jobs','not-an-id','evidence'],'GET'),null);
+});
