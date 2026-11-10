@@ -1,0 +1,56 @@
+name: Career Intelligence Private Knowledge Sync (opt-in)
+on:
+  schedule:
+    - cron: '42 */6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: career-intelligence-knowledge-sync
+  cancel-in-progress: false
+jobs:
+  index-private-vault:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI_KNOWLEDGE_SYNC: ${{ vars.CI_KNOWLEDGE_SYNC }}
+      CI_KNOWLEDGE_REPO: ${{ vars.CI_KNOWLEDGE_REPO }}
+      CI_KNOWLEDGE_TOKEN: ${{ secrets.CI_KNOWLEDGE_TOKEN }}
+      DATABASE_URL: ${{ secrets.CI_DATABASE_URL }}
+    steps:
+      - name: Check explicit knowledge sync authorization
+        id: gate
+        shell: bash
+        run: |
+          if [[ "$CI_KNOWLEDGE_SYNC" == "true" && -n "$CI_KNOWLEDGE_REPO" && "$CI_KNOWLEDGE_REPO" == */* && -n "$CI_KNOWLEDGE_TOKEN" && -n "$DATABASE_URL" ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo 'Knowledge sync inactive: explicit opt-in and private repo credentials required.'
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          path: application
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          repository: ${{ vars.CI_KNOWLEDGE_REPO }}
+          token: ${{ secrets.CI_KNOWLEDGE_TOKEN }}
+          path: approved-vault
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          python-version: '3.12'
+      - name: Install bounded worker
+        if: steps.gate.outputs.enabled == 'true'
+        working-directory: application
+        run: python -m pip install -e 'services/worker[agents]'
+      - name: Index approved Obsidian notes with exact Git revision
+        if: steps.gate.outputs.enabled == 'true'
+        working-directory: application
+        run: |
+          REVISION="$(git -C ../approved-vault rev-parse HEAD)"
+          python -m career.cli pg-vault-sync ../approved-vault --revision "$REVISION"
