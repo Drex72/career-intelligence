@@ -9,7 +9,7 @@ const slug=/^[a-zA-Z0-9_-]{1,100}$/;
 const httpLink=/https:\/\/[^\s"'<>\\]+/gi;
 export function candidateBoards(description, company, sourceURL) {
   if(typeof company!=='string'||company.trim().length<2||company.trim().length>180 ||
-     typeof sourceURL!=='string'||!/^https:\/\/remotive\.com\/remote-jobs\//.test(sourceURL))
+     typeof sourceURL!=='string'||!(/^(?:https:\/\/remotive\.com\/remote-jobs\/|https:\/\/himalayas\.app\/companies\/[A-Za-z0-9_-]+\/jobs\/[A-Za-z0-9_-]+$)/.test(sourceURL)))
     return [];
   const input=String(description||'').slice(0,50000).replaceAll('&amp;','&');
   const found=new Map();

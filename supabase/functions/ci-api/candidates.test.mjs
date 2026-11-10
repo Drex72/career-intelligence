@@ -20,3 +20,11 @@ test('deduplicates links per board and never invents employer verification',()=>
   assert.equal(xs.length,1);
   assert.deepEqual(Object.keys(xs[0]).sort(),['company','evidenceURL','provider','slug']);
 });
+
+test('Himalayas job links can propose ATS candidates without bypassing review',()=>{
+  const url='https://himalayas.app/companies/example/jobs/backend-engineer';
+  const xs=candidateBoards('https://job-boards.greenhouse.io/team/jobs/445','Team',url);
+  assert.equal(xs.length,1);assert.equal(xs[0].provider,'greenhouse');
+  assert.equal(xs[0].evidenceURL,url);
+  assert.deepEqual(candidateBoards('https://jobs.lever.co/team/role','Team',url+'?bad=1'),[]);
+});
