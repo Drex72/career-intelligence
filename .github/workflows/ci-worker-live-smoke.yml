@@ -1,0 +1,28 @@
+name: Live CI Worker Unauthorized Request Smoke
+on:
+  push:
+    paths:
+      - 'supabase/functions/ci-worker/**'
+      - '.github/workflows/ci-worker-live-smoke.yml'
+  pull_request:
+    paths:
+      - 'supabase/functions/ci-worker/**'
+      - '.github/workflows/ci-worker-live-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  signed-worker-denial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Missing and invalid signatures are rejected by live ci-worker
+        env:
+          WORKER_URL: https://manqpbwiwmzqxgldhbdt.supabase.co/functions/v1/ci-worker
+        run: |
+          set -euo pipefail
+          code="$(curl --proto '=https' --tlsv1.2 --max-time 15 -sS             -o /dev/null -w '%{http_code}' -H 'content-type: application/json'             -d '{}' "$WORKER_URL")"
+          test "$code" = "401" || { echo "Missing signature: expected 401, got $code"; exit 1; }
+          code="$(curl --proto '=https' --tlsv1.2 --max-time 15 -sS             -o /dev/null -w '%{http_code}' -H 'content-type: application/json'             -d '{"nonce":"0c85350d-00fe-4d90-89d8-94938af03058","timestamp":1794312000,"signature":"0000000000000000000000000000000000000000000000000000000000000000"}' "$WORKER_URL")"
+          test "$code" = "401" || { echo "Invalid signature: expected 401, got $code"; exit 1; }
+          echo 'Live ci-worker rejected missing and invalid signatures.'
