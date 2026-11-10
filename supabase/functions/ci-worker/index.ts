@@ -123,7 +123,7 @@ Deno.serve(async (request:Request)=>{
           for(const job of jobs){
             const saved=await db.rpc('ci_ingest_himalayas_job',{
               p_guid:job.guid,p_company:job.company,p_title:job.title,
-              p_application_link:job.applicationLink,p_published_at:job.publishedAt,
+              p_application_link:job.applicationLink,p_published_at:job.lastUpdatedAt,
               p_locations:job.locations
             });
             if(saved.error||!saved.data){report.failures++;continue;}

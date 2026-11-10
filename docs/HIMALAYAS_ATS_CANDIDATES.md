@@ -22,3 +22,9 @@ Himalayas often returns a tracked Himalayas `applicationLink`. The worker now in
 Feed traversal uses `nextCursor`, URL-encoded and capped to three pages per scheduled fetch. The previous deprecated `offset` pagination has been removed. This honors the provider's current public API contract and avoids fabricating job IDs or positions when the cursor is absent.
 
 A description that contains no independently recognizable public ATS link produces **no source suggestion**, which is the intended safe result.
+
+## Publication timestamp provenance
+
+Himalayas documents `pubDate` as a last-update timestamp in its current Jobs API reference. We store this under `ci_jobs.updated_at`, mark `timestamp_source='himalayas_pubDate_last_updated'`, and leave `published_at` NULL when no independently confirmed original publication time exists.
+
+The migration also corrects previously imported Himalayas-only jobs. This prevents an old job that was merely edited from being considered a newly published recommendation. Roles can still be browsed, but the verified recommendation batch requires a genuine publication date from another trustworthy source.

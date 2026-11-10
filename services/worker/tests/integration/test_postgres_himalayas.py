@@ -21,6 +21,11 @@ def test_himalayas_ingestion_preserves_apply_link_and_attribution():
   assert db.execute("select ci_ingest_himalayas_job(%s,%s,%s,%s,%s,%s)",p).fetchone()[0]==job
   values=db.execute('select apply_url,status,remote_text from ci_jobs where id=%s',(job,)).fetchone()
   assert values==(apply,'unverified','Location restrictions: NG')
+  stamped=db.execute('select published_at,updated_at,timestamp_source,timestamp_confidence from ci_jobs where id=%s',(job,)).fetchone()
+  assert stamped[0] is None, 'Himalayas pubDate must not masquerade as original posting date'
+  assert stamped[1]==p[4]
+  assert stamped[2]=='himalayas_pubDate_last_updated'
+  assert stamped[3]=='unknown'
   ref=db.execute("select source_name,source_url from ci_job_sources where job_id=%s",(job,)).fetchone()
   assert ref==('himalayas',guid)
   assert db.execute('select count(*) from ci_eligibility_assessments where job_id=%s',(job,)).fetchone()[0]==0
