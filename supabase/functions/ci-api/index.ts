@@ -372,6 +372,26 @@ Deno.serve(async (request:Request)=>{
       const record=check(await db.from('ci_applications').upsert({owner_user_id:owner,company_id:j.company_id,job_id:body.job_id,status:body.status,notes:body.notes||'',applied_at:body.status==='applied'?new Date().toISOString():null},{onConflict:'owner_user_id,job_id'}).select('id').single());
       return reply(200,{id:record.id});
     }
+    if(operation.type==='approveOutreach'){
+      if(!body || !isUuid(body.draft_id) || !['manual','standing'].includes(body.mode))
+        return reply(422,{error:'Valid draft UUID and approval mode required'});
+      const accepted=check(await db.rpc('ci_approve_outreach_draft',{
+        p_owner:owner,p_draft:body.draft_id,p_mode:body.mode
+      }));
+      if(!accepted)return reply(409,{error:'Approval blocked: verify application, recipient, eligibility, suppression and policy'});
+      return reply(200,{approved:true,draft_id:body.draft_id,mode:body.mode,
+        note:'Approval recorded. No email has been sent.'});
+    }
+    if(operation.type==='prepareOutreachIntent'){
+      if(!body || !isUuid(body.draft_id))
+        return reply(422,{error:'Valid draft UUID required'});
+      const intentId=check(await db.rpc('ci_prepare_outreach_intent',{
+        p_owner:owner,p_draft:body.draft_id
+      }));
+      if(!intentId)return reply(409,{error:'Not eligible for queuing: approval, application, recipient, suppression or quota restriction'});
+      return reply(200,{id:intentId,status:'pending',provider:'gmail',
+        note:'A durable pending intent has been recorded. Sending is disabled until the Gmail dispatcher is connected and authorized.'});
+    }
     if(operation.type==='draft'){
       if(!validDraft(body))return reply(422,{detail:'Invalid draft input'});
       const [jr,cr,ar,kr]=await Promise.all([
