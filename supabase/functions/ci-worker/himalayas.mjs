@@ -3,10 +3,10 @@
 export function isSoftwareRole(input) {
   const title=String(input||'').trim();
   if(title.length<3||title.length>250)return false;
-  if(/\\b(?:sales engineer|sales engineering|sales solutions|business development|digital research analyst|investigator|customer success|life sciences research expert)\\b/i.test(title))return false;
-  const engineering=/\\b(?:software|backend|back-end|frontend|front-end|full[ -]?stack|web|cloud|platform|infrastructure|devops|site reliability|sre|machine learning|ml|ai|artificial intelligence|systems|data|cybersecurity|security|python|typescript|javascript|java|rust|golang|node(?:\\.js)?)\\b/i;
-  const role=/\\b(?:engineer|developer|architect|programmer|research engineer)\\b/i;
-  return /\\bdeveloper\\b/i.test(title) || (engineering.test(title)&&role.test(title));
+  if(/\b(?:sales engineer|sales engineering|sales solutions|business development|digital research analyst|investigator|customer success|life sciences research expert)\b/i.test(title))return false;
+  const engineering=/\b(?:software|backend|back-end|frontend|front-end|full[ -]?stack|web|cloud|platform|infrastructure|devops|site reliability|sre|machine learning|ml|ai|artificial intelligence|systems|data|cybersecurity|security|python|typescript|javascript|java|rust|golang|node(?:\.js)?)\b/i;
+  const role=/\b(?:engineer|developer|architect|programmer|research engineer)\b/i;
+  return /\bdeveloper\b/i.test(title) || (engineering.test(title)&&role.test(title));
 }
 function safeURL(input){
   try{
