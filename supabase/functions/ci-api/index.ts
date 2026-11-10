@@ -130,7 +130,18 @@ Deno.serve(async (request:Request)=>{
         const xs=list(check(await db.from('ci_contacts').select('id,name,current_title,profile_url,company_id,identity_verified,ci_companies(legal_name)').order('created_at',{ascending:false}).limit(100)));
         return reply(200,{contacts:xs.map((j:any)=>({...j,company_name:j.ci_companies?.legal_name||'',ci_companies:undefined}))});
       }
-      if(path==='knowledge')return reply(200,{documents:list(check(await db.from('ci_knowledge_documents').select('path,visibility,git_sha,content_sha,updated_at').eq('status','approved').order('path').limit(500)))});
+      if(path==='knowledge'){
+        const [documents,syncs]=await Promise.all([
+          db.from('ci_knowledge_documents')
+            .select('path,visibility,git_sha,content_sha,updated_at')
+            .eq('status','approved').order('path').limit(500),
+          db.from('ci_knowledge_sync_runs')
+            .select('git_sha,status,approved_count,changed_count,tombstoned_count,skipped_count,finished_at')
+            .order('finished_at',{ascending:false}).limit(1)
+        ]);
+        return reply(200,{documents:list(check(documents)),last_sync:list(check(syncs))[0]||null,
+          note:'Only explicitly approved non-private notes are indexed. Actual note bodies remain server-only.'});
+      }
       if(path==='applications'){
         const xs=list(check(await db.from('ci_applications').select('id,job_id,status,applied_at,notes,ci_jobs(title,apply_url),ci_companies(legal_name)').eq('owner_user_id',owner).order('applied_at',{ascending:false,nullsFirst:false}).limit(500)));
         return reply(200,{applications:xs.map((x:any)=>({id:x.id,job_id:x.job_id,status:x.status,applied_at:x.applied_at,notes:x.notes,title:x.ci_jobs?.title||'',apply_url:x.ci_jobs?.apply_url||'',company_name:x.ci_companies?.legal_name||''}))});
