@@ -8,6 +8,11 @@ from uuid import UUID
 from career.persistence.postgres_catalog import PostgresCareerCatalog
 
 
+class DraftRequest(BaseModel):
+    job_id: UUID
+    contact_id: UUID
+
+
 class ApplicationInput(BaseModel):
     job_id: UUID
     status: Literal['discovered','saved','applied','interviewing','offer','rejected','withdrawn']
@@ -70,6 +75,15 @@ def make_pg_app(dsn: str, owner_auth, *, store_factory=PostgresCareerCatalog) ->
     def outreach(owner=Depends(require_owner)):
         with store_factory(dsn) as catalog:
             return {'drafts':catalog.list_outreach(owner)}
+
+    @app.post('/api/ci/outreach/drafts')
+    def draft_outreach(body:DraftRequest,owner=Depends(require_owner)):
+        from career.persistence.pg_outreach import prepare_pg_draft
+        with store_factory(dsn) as catalog:
+            try:
+                return {'id':prepare_pg_draft(catalog,owner,str(body.job_id),str(body.contact_id))}
+            except ValueError as error:
+                raise HTTPException(status_code=422,detail=str(error)) from error
 
     @app.get('/api/ci/operations')
     def operations(owner=Depends(require_owner)):
