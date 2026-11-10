@@ -5,7 +5,7 @@ import { useCareerSession } from '@/components/AuthGate';
 import { ciFetch } from '@/lib/api';
 import { ResourceTable,StateNotice,Status } from '@/components/ResourceTable';
 import { safeDateLabel } from '@/lib/data.mjs';
-type Job={id:string,company_name:string,title:string,published_at:string|null,eligibility:string|null,match_score:number,apply_url:string,source?:string,source_url?:string|null};
+type Job={id:string,company_name:string,title:string,published_at:string|null,eligibility:string|null,eligibility_expired?:boolean,eligibility_reason?:string|null,match_score:number,apply_url:string,source?:string,source_url?:string|null};
 type Source={source_name:string,source_url:string,retrieved_at:string};
 type Evidence={source_url:string,source_kind:string,excerpt:string,observed_at:string,claim:string};
 type Assessment={status:string,confidence:number,assessed_at:string,reasons:unknown,contradictions:unknown};
@@ -49,7 +49,7 @@ export default function Opportunities(){
       {!loading&&!error&&<ResourceTable items={filtered} columns={[
         {key:'employer',label:'Company',render:r=><strong>{r.company_name}</strong>},
         {key:'role',label:'Role',render:r=>r.title},
-        {key:'status',label:'Eligibility',render:r=><Status value={r.eligibility}/>},
+        {key:'status',label:'Eligibility',render:r=><span title={r.eligibility_reason||undefined}><Status value={r.eligibility}/>{r.eligibility_expired&&<span className="muted"> · Expired</span>}</span>},
         {key:'score',label:'Match',render:r=>r.match_score?`${r.match_score}%`:'Not scored'},
         {key:'source',label:'Source',render:r=>{
           const label=r.source==='remotive'?'Remotive':r.source==='himalayas'?'Himalayas':(r.source||'Unspecified');
