@@ -11,6 +11,7 @@ export function route(url, method) {
   const path = p.slice(at + marker.length);
   if (method === 'GET' && readRoutes.has(path)) return {type:'read',path};
   if (method === 'GET' && /^batches\/\d{4}-\d{2}-\d{2}$/.test(path)) return {type:'batch',day:path.slice(8)};
+  if (method === 'POST' && path === 'discover') return {type:'discover'};
   if (method === 'POST' && path === 'applications') return {type:'application'};
   if (method === 'POST' && path === 'outreach/drafts') return {type:'draft'};
   if (method === 'POST' && path === 'conversations') return {type:'conversation'};

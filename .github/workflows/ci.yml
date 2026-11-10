@@ -47,6 +47,8 @@ jobs:
         run: python -m pytest services/worker/tests/system/test_postgres_ledger.py -v
       - name: Verify PostgreSQL company/job catalog and lifetime deliveries
         run: python -m pytest services/worker/tests/integration/test_postgres_catalog.py -v
+      - name: Verify bounded manual Remotive ingestion and rate limits
+        run: python -m pytest services/worker/tests/integration/test_postgres_manual_discovery.py -v
       - name: Verify source registry migration and board metadata
         run: python -m pytest services/worker/tests/integration/test_postgres_sources.py -v
       - name: Verify versioned private knowledge ingestion
