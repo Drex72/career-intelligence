@@ -71,7 +71,7 @@
 .factory-v2-map-footer>div{display:flex;align-items:center;flex-wrap:wrap;gap:9px}
 .factory-v2-legenddot{display:inline-block;height:7px;width:7px;border-radius:50%}
 .factory-v2-legenddot.recent{background:#2bbd91}.factory-v2-legenddot.archived{background:#9cabb7;margin-left:10px}.factory-v2-legenddot.selected{background:#488fcb;margin-left:10px}
-.factory-v2-replay{display:grid;grid-template-columns:minmax(230px,1fr) minmax(220px,2fr) auto;gap:22px;align-items:center;padding:14px 23px;background:#edf5fa;border-top:1px solid #d9e7f1}
+.factory-v2-replay{display:grid;grid-template-columns:minmax(210px,1fr) auto minmax(220px,2fr) auto auto;gap:22px;align-items:center;padding:14px 23px;background:#edf5fa;border-top:1px solid #d9e7f1}
 .factory-v2-replay>div{display:grid;gap:2px}
 .factory-v2-replay b{font-size:11px;color:#1d4d72}
 .factory-v2-replay span{font-size:10px;color:#698499}
@@ -143,3 +143,7 @@
 @media(max-width:1050px){.factory-v2-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.factory-v2-grid,.factory-v2-grid.lower{grid-template-columns:1fr}.factory-v2-eventlist{max-height:360px}}
 @media(max-width:700px){.factory-v2-toolbar{padding:17px}.factory-v2-controls{width:100%}.factory-v2-map-footer{align-items:flex-start;flex-direction:column}.factory-v2-replay{grid-template-columns:1fr;gap:12px}.factory-v2-metric{padding:13px}.factory-v2-metric-icon{width:36px;height:36px}.factory-v2-metric strong{font-size:24px}.factory-v2-panel{padding:17px}.factory-v2-transform-line{grid-template-columns:1fr;gap:5px}.factory-v2-transform-line>span{transform:rotate(90deg);justify-self:center}.factory-v2-json-pair{grid-template-columns:1fr}.factory-v2-codebox pre{min-height:115px}.factory-v2-bottom>a{margin-left:0}}
 @media(prefers-reduced-motion:reduce){.factory-v2-node,.factory-v2-edge,.factory-v2-packet,.factory-v2-node-status i{animation:none!important;transition:none!important}.factory-v2-node:hover{transform:none}.factory-v2-packet{display:none}}
+
+.factory-v2-replay-play,.factory-v2-replay select{border:1px solid #b7d4e4;border-radius:8px;background:#fff;color:#24638d;padding:8px 10px;font-size:11px;font-weight:740;min-height:35px}
+.factory-v2-replay-play:hover{background:#dff0fa}
+@media(max-width:900px){.factory-v2-replay{grid-template-columns:1fr auto auto}.factory-v2-replay input{grid-column:1/-1;grid-row:2}.factory-v2-replay>span{grid-column:2}.factory-v2-replay select{grid-column:3}}
