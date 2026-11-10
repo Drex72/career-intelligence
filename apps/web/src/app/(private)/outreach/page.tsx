@@ -5,6 +5,8 @@ import { useResource } from '@/components/useResource';
 import { useCareerSession } from '@/components/AuthGate';
 import { ResourceTable,StateNotice,Status } from '@/components/ResourceTable';
 import { ciFetch } from '@/lib/api';
+import {DraftPreviewDialog} from '@/components/DraftPreviewDialog';
+import {Button} from '@radix-ui/themes';
 
 type Job={id:string,title:string,company_name:string,company_id:string,eligibility:string};
 type Contact={id:string,name:string,company_id:string};
@@ -42,7 +44,7 @@ export default function Outreach(){
     <section className="workspace-surface"><div className="section-title"><h2>Your drafts</h2><p className="muted">Private drafts prepared for review. No messages have been sent.</p></div><StateNotice loading={drafts.loading} error={drafts.error}/>
       {drafts.data&&<ResourceTable items={drafts.data.drafts} columns={[
         {key:'subject',label:'Subject',render:r=><strong>{r.subject}</strong>},
-        {key:'preview',label:'Preview',render:r=><span className="muted">{r.body.slice(0,140)}{r.body.length>140?'…':''}</span>},
+        {key:'preview',label:'Preview',render:r=><div className="draft-row-preview"><span className="muted">{r.body.slice(0,100)}{r.body.length>100?'…':''}</span><DraftPreviewDialog subject={r.subject} body={r.body} status={r.status}/></div>},
         {key:'status',label:'Status',render:r=><Status value={r.status}/>},
       ]} empty="No outreach drafts yet."/>}</section>
     </div>
