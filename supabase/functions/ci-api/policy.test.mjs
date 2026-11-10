@@ -39,3 +39,11 @@ test('daily batch generation is a separate owner-only POST route',()=>{
  assert.deepEqual(route('https://localhost/functions/v1/ci-api/api/ci/batches/generate','POST'),{type:'generateBatch'});
  assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/batches/generate','GET'),null);
 });
+
+test('ATS source operations require owner POST, while review queue is read-only',()=>{
+  assert.deepEqual(route('https://localhost/api/ci/sources','POST'),{type:'registerSource'});
+  assert.deepEqual(route('https://localhost/api/ci/sources/scan','POST'),{type:'scanSource'});
+  assert.deepEqual(route('https://localhost/api/ci/sources','GET'),{type:'read',path:'sources'});
+  assert.deepEqual(route('https://localhost/api/ci/eligibility-queue','GET'),{type:'read',path:'eligibility-queue'});
+  assert.equal(route('https://localhost/api/ci/sources/scan','GET'),null);
+});
