@@ -71,3 +71,9 @@ test('revocation requires a POST and never exposes Gmail transport',()=>{
   assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/outreach/revoke','GET'),null);
   assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/outreach/send','POST'),null);
 });
+
+test('owner preferences are an explicit authenticated read and save route',()=>{
+  assert.deepEqual(route('https://localhost/api/ci/preferences','GET'),{type:'read',path:'preferences'});
+  assert.deepEqual(route('https://localhost/api/ci/preferences','POST'),{type:'savePreferences'});
+  assert.equal(route('https://localhost/api/ci/preferences/override','POST'),null);
+});
