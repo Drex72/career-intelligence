@@ -10,6 +10,7 @@ export function route(url, method) {
   if (at === -1) return null;
   const path = p.slice(at + marker.length);
   if (method === 'GET' && readRoutes.has(path)) return {type:'read',path};
+  if (method === 'GET' && /^jobs\/[0-9a-f-]{36}\/evidence$/i.test(path) && isUuid(path.split('/')[1])) return {type:'evidence',jobId:path.split('/')[1]};
   if (method === 'GET' && /^batches\/\d{4}-\d{2}-\d{2}$/.test(path)) return {type:'batch',day:path.slice(8)};
   if (method === 'POST' && path === 'discover') return {type:'discover'};
   if (method === 'POST' && path === 'applications') return {type:'application'};
