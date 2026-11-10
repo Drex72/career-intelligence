@@ -45,12 +45,14 @@ export default function Applications(){
       </section>
       <aside className="workspace-surface application-editor">
         <SectionHeading title="Update an application" description="Record what you've done and keep a useful paper trail."/>
+        <StateNotice loading={jobs.loading} error={jobs.error}/>
+        {!jobs.loading&&!jobs.error&&jobs.data?.jobs.length===0&&<Notice title="No discovered jobs yet">Browse opportunities and import a public listing before recording an application.</Notice>}
         <form className="stacked-form" onSubmit={submit}>
           <label>Position<select value={jobId} required onChange={e=>setJobId(e.target.value)}><option value="">Choose a discovered role</option>{(jobs.data?.jobs||[]).map(j=><option key={j.id} value={j.id}>{j.company_name} · {j.title}</option>)}</select></label>
           <label>Current stage<select value={status} onChange={e=>setStatus(e.target.value)}>{statuses.map(s=><option value={s} key={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}</select></label>
           <label>Notes <span className="optional-label">Optional</span><textarea rows={4} maxLength={1000} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Interview details, next steps, or a follow-up reminder"/></label>
           {message&&<Notice tone="success">{message}</Notice>}{error&&<Notice tone="danger">{error}</Notice>}
-          <button className="button-primary" disabled={busy||!jobId} type="submit">{busy?'Saving…':'Save application status'}</button>
+          <button className="button-primary" disabled={busy||!jobId||jobs.loading||Boolean(jobs.error)} type="submit">{busy?'Saving…':'Save application status'}</button>
         </form>
       </aside>
     </div>
