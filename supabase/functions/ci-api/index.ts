@@ -192,7 +192,36 @@ Deno.serve(async (request:Request)=>{
         const workerRuns=list(check(await db.from('ci_worker_runs')
           .select('started_at,finished_at,state,details')
           .order('started_at',{ascending:false}).limit(10)));
-        return reply(200,{states:counts,delivery,workerRuns});
+        // Read-only funnel: distinguish discovery from evidence-backed, eligible delivery.
+        // Counts are independent observations, not a claim that all jobs have passed each stage.
+        const since=new Date(Date.now()-7*86400_000).toISOString();
+        const [
+          jobsTotal,sourceRecords,openJobs,recentPublication,
+          eligibilityRecords,officialEvidence,boards,candidates
+        ]=await Promise.all([
+          db.from('ci_jobs').select('id',{head:true,count:'exact'}),
+          db.from('ci_job_sources').select('id',{head:true,count:'exact'}),
+          db.from('ci_jobs').select('id',{head:true,count:'exact'}).eq('status','open'),
+          db.from('ci_jobs').select('id',{head:true,count:'exact'}).gte('published_at',since),
+          db.from('ci_eligibility_assessments').select('id',{head:true,count:'exact'}),
+          db.from('ci_eligibility_evidence').select('id',{head:true,count:'exact'}),
+          db.from('ci_discovery_sources').select('id',{head:true,count:'exact'}).eq('kind','ats').eq('state','active'),
+          db.from('ci_ats_source_candidates').select('id',{head:true,count:'exact'}).eq('state','pending'),
+        ]);
+        for(const query of [jobsTotal,sourceRecords,openJobs,recentPublication,eligibilityRecords,officialEvidence,boards,candidates]){
+          if(query.error)throw new Error('readiness count unavailable');
+        }
+        const readiness={
+          discovered_jobs:jobsTotal.count??0,
+          source_records:sourceRecords.count??0,
+          open_jobs:openJobs.count??0,
+          recent_confirmed_publication:recentPublication.count??0,
+          eligibility_assessments:eligibilityRecords.count??0,
+          eligibility_evidence:officialEvidence.count??0,
+          active_ats_boards:boards.count??0,
+          pending_source_candidates:candidates.count??0,
+        };
+        return reply(200,{states:counts,delivery,workerRuns,readiness});
       }
     }
     if(operation.type==='batch'){
