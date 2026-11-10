@@ -8,7 +8,7 @@ import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
 import {candidateBoards} from './candidates.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription} from './eligibility.mjs';
 import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
-import {normalizeHimalayas} from './himalayas.mjs';
+import {normalizeHimalayas,safeHimalayasCursor} from './himalayas.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
 const response=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
@@ -112,10 +112,13 @@ Deno.serve(async (request:Request)=>{
     // quota and keep official Apply URLs and provider attribution unchanged.
     const himalayasSlot=checked(await db.rpc('ci_claim_feed_slot',{p_action:'himalayas'}));
     if(himalayasSlot){
-      for(let offset=0;offset<=40;offset+=20){
+      let cursor:string|null=null;
+      const seenCursors=new Set<string>();
+      for(let pageIndex=0;pageIndex<3;pageIndex++){
         report.attempts++;
         try{
-          const page=await fetchJSON('https://himalayas.app/jobs/api?limit=20&offset='+offset);
+          const endpoint='https://himalayas.app/jobs/api?limit=20'+(cursor?'&cursor='+encodeURIComponent(cursor):'');
+          const page=await fetchJSON(endpoint);
           const jobs=normalizeHimalayas(page);
           for(const job of jobs){
             const saved=await db.rpc('ci_ingest_himalayas_job',{
@@ -128,7 +131,7 @@ Deno.serve(async (request:Request)=>{
             // An official ATS application link is a proposal, not verified employer identity.
             // The user must approve it in the source-candidate queue before scanning.
             if(report.candidates<10){
-              for(const candidate of candidateBoards(job.applicationLink,job.company,job.guid)){
+              for(const candidate of candidateBoards(job.applicationLink+' '+job.description,job.company,job.guid)){
                 const proposed=await db.rpc('ci_suggest_ats_board',{
                   p_provider:candidate.provider,p_board_slug:candidate.slug,
                   p_company_name:candidate.company,p_evidence_url:candidate.evidenceURL
@@ -138,7 +141,10 @@ Deno.serve(async (request:Request)=>{
               }
             }
           }
-          if(!Array.isArray(page?.jobs)||page.jobs.length<20)break;
+          const next=safeHimalayasCursor(page?.nextCursor,seenCursors);
+          if(!next)break;
+          seenCursors.add(next);
+          cursor=next;
         }catch{report.failures++;break;}
       }
     }
