@@ -4,6 +4,7 @@ import {route,isUuid,validApplication,validDraft,validReply,classifyReply,roleRe
 import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription} from './eligibility.mjs';
 import {candidateBoards} from './candidates.mjs';
+import {currentEligibility,visibleMatchScore,currentApprovedRevision} from './decision.mjs';
 
 const baseHeaders = {'content-type':'application/json; charset=utf-8','cache-control':'no-store, max-age=0','x-content-type-options':'nosniff'};
 const reply=(status:number,payload:unknown)=>new Response(JSON.stringify(payload),{status,headers:baseHeaders});
@@ -74,16 +75,56 @@ Deno.serve(async (request:Request)=>{
         const jobs=list(check(await db.from('ci_jobs').select('id,title,apply_url,status,published_at,first_seen_at,company_id,ci_companies(legal_name)').order('published_at',{ascending:false,nullsFirst:false}).limit(limit)));
         const ids=jobs.map((x:any)=>x.id);
         if(!ids.length)return reply(200,{jobs:[]});
-        const [e,m,sources]=await Promise.all([
-          db.from('ci_eligibility_assessments').select('job_id,status,assessed_at').in('job_id',ids).order('assessed_at',{ascending:false}).limit(1000),
-          db.from('ci_job_matches').select('job_id,score,computed_at').in('job_id',ids).order('computed_at',{ascending:false}).limit(1000),
-          db.from('ci_job_sources').select('job_id,source_name,source_url').in('job_id',ids).order('retrieved_at',{ascending:false}).limit(1000),
+        const [e,m,sources,evidence,tasks,documents]=await Promise.all([
+          db.from('ci_eligibility_assessments').select('id,job_id,status,assessed_at,expires_at')
+            .in('job_id',ids).order('assessed_at',{ascending:false}).order('id',{ascending:false}).limit(1000),
+          db.from('ci_job_matches').select('job_id,score,computed_at,knowledge_revision')
+            .in('job_id',ids).order('computed_at',{ascending:false}).limit(1000),
+          db.from('ci_job_sources').select('job_id,source_name,source_url')
+            .in('job_id',ids).order('retrieved_at',{ascending:false}).limit(1000),
+          db.from('ci_eligibility_evidence').select('job_id')
+            .in('job_id',ids).limit(1000),
+          db.from('ci_workflow_tasks').select('input_ref,state')
+            .eq('task_type','matching')
+            .in('input_ref',ids.map((id:string)=>'job:'+id)).limit(1000),
+          db.from('ci_knowledge_documents').select('id,path,git_sha,content_sha')
+            .eq('status','approved').in('visibility',['matching-safe','agents-safe']).limit(50)
         ]);
-        const es=new Map<string,string>(),ms=new Map<string,number>(),ss=new Map<string,{name:string,url:string}>();
-        for(const item of list(check(e)))if(!es.has(item.job_id))es.set(item.job_id,item.status);
-        for(const item of list(check(m)))if(!ms.has(item.job_id))ms.set(item.job_id,item.score);
-        for(const item of list(check(sources)))if(!ss.has(item.job_id))ss.set(item.job_id,{name:item.source_name,url:item.source_url});
-        return reply(200,{jobs:jobs.map((j:any)=>({id:j.id,title:j.title,apply_url:j.apply_url,status:j.status,published_at:j.published_at,first_seen_at:j.first_seen_at,company_id:j.company_id,company_name:j.ci_companies?.legal_name||'',eligibility:es.get(j.id)||null,match_score:ms.get(j.id)||0,source:ss.get(j.id)?.name||'unknown',source_url:ss.get(j.id)?.url||null}))});
+        const es=new Map<string,any>(),ms=new Map<string,any>(),
+          ss=new Map<string,{name:string,url:string}>(),taskStates=new Map<string,string>();
+        const evidenceJobs=new Set(list(check(evidence)).map((v:any)=>v.job_id));
+        for(const item of list(check(e)))if(!es.has(item.job_id))es.set(item.job_id,item);
+        for(const item of list(check(m)))if(!ms.has(item.job_id))ms.set(item.job_id,item);
+        for(const item of list(check(sources)))if(!ss.has(item.job_id))
+          ss.set(item.job_id,{name:item.source_name,url:item.source_url});
+        for(const item of list(check(tasks)))taskStates.set(item.input_ref,item.state);
+        const approvedDocs=list(check(documents));
+        let activeKnowledgeRevision:string|null=null;
+        if(approvedDocs.length){
+          const revisions=list(check(await db.from('ci_knowledge_versions')
+            .select('document_id,revision,body')
+            .in('document_id',approvedDocs.map((d:any)=>d.id))
+            .in('revision',approvedDocs.map((d:any)=>d.git_sha))
+            .limit(150)));
+          const validDocs=approvedDocs.filter((d:any)=>revisions.some((v:any)=>
+            v.document_id===d.id && v.revision===d.git_sha &&
+            typeof v.body==='string' && v.body.trim().length>0));
+          activeKnowledgeRevision=await currentApprovedRevision(validDocs);
+        }
+        const stamp=Date.now();
+        return reply(200,{jobs:jobs.map((j:any)=>{
+          const decision=currentEligibility(es.get(j.id),evidenceJobs.has(j.id),stamp);
+          return {
+            id:j.id,title:j.title,apply_url:j.apply_url,status:j.status,
+            published_at:j.published_at,first_seen_at:j.first_seen_at,
+            company_id:j.company_id,company_name:j.ci_companies?.legal_name||'',
+            eligibility:decision.status,eligibility_expired:decision.expired,
+            eligibility_reason:decision.reason,
+            match_score:visibleMatchScore(ms.get(j.id),decision,taskStates.get('job:'+j.id),activeKnowledgeRevision),
+            source:ss.get(j.id)?.name||'unknown',
+            source_url:ss.get(j.id)?.url||null
+          };
+        })});
       }
       if(path==='people'){
         const xs=list(check(await db.from('ci_contacts').select('id,name,current_title,profile_url,company_id,identity_verified,ci_companies(legal_name)').order('created_at',{ascending:false}).limit(100)));
