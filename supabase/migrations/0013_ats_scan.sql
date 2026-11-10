@@ -73,7 +73,7 @@ begin
     status=case when ci_jobs.status='closed' then 'open' else ci_jobs.status end
   returning id into job_id;
   insert into ci_job_sources(job_id,source_name,source_job_id,source_url)
-  values(job_id,p_provider,p_source_job_id,p_url)
+  values(job_id,p_provider,p_board||':'||p_source_job_id,p_url)
   on conflict(source_name,source_job_id) where source_job_id is not null
   do update set retrieved_at=now(),source_url=excluded.source_url;
   insert into ci_eligibility_review_queue(job_id)
