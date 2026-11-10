@@ -1,6 +1,7 @@
 'use client';
 import {PageHeading} from '@/components/WorkspaceUI';
 import {DiscoveryPreferences} from '@/components/DiscoveryPreferences';
+import {readinessGuidance} from '@/lib/readiness-guidance.mjs';
 import {useState, type FormEvent} from 'react';
 import {useResource} from '@/components/useResource';
 import {useCareerSession} from '@/components/AuthGate';
@@ -8,7 +9,12 @@ import {ciFetch} from '@/lib/api';
 import {StateNotice} from '@/components/ResourceTable';
 
 type WorkerRun={started_at:string,finished_at:string|null,state:string,details:Record<string,number>};
-type Operations={states:Record<string,number>,delivery?:{date:string,state:string,delivered:number,target:number}|null,workerRuns?:WorkerRun[]};
+type Readiness={
+  discovered_jobs:number,source_records:number,open_jobs:number,
+  recent_confirmed_publication:number,eligibility_assessments:number,
+  eligibility_evidence:number,active_ats_boards:number,pending_source_candidates:number
+};
+type Operations={states:Record<string,number>,delivery?:{date:string,state:string,delivered:number,target:number}|null,workerRuns?:WorkerRun[],readiness?:Readiness};
 type Source={id:string,name:string,state:string,config:{provider:string,slug:string,company_name:string}};
 type Candidate={id:string,provider:string,board_slug:string,company_name:string,evidence_url:string,state:string};
 type QueueItem={job_id:string,title:string,company_name:string,apply_url:string|null,first_queued_at:string};
@@ -84,6 +90,34 @@ export default function Operations(){
       <span>{state.replace(/_/g,' ')}</span><strong>{count}</strong></div>)}</section>
     {tasks.data&&Object.keys(tasks.data.states).length===0&&<div className="empty-state">No PostgreSQL workflow tasks have been created yet.</div>}
     <DiscoveryPreferences/>
+    <section className="workspace-surface" aria-labelledby="readiness-heading">
+      <div className="section-title"><div>
+        <h2 id="readiness-heading">Recommendation pipeline health</h2>
+        <p className="muted">Observed production counts, not estimated eligible opportunities. A role is recommended only when every evidence and deduplication gate passes.</p>
+      </div></div>
+      {tasks.data?.readiness?
+        <div>
+          <div className="metric-grid">
+            {([
+              ['Discovered jobs',tasks.data.readiness.discovered_jobs],
+              ['Source records',tasks.data.readiness.source_records],
+              ['Confirmed open',tasks.data.readiness.open_jobs],
+              ['Published within 7 days',tasks.data.readiness.recent_confirmed_publication],
+              ['Eligibility assessments',tasks.data.readiness.eligibility_assessments],
+              ['Eligibility evidence',tasks.data.readiness.eligibility_evidence],
+              ['Active ATS boards',tasks.data.readiness.active_ats_boards],
+              ['Board suggestions to review',tasks.data.readiness.pending_source_candidates],
+            ] as const).map(([label,value])=><div className="metric" key={label}><span>{label}</span><strong>{value}</strong></div>)}
+          </div>
+          {readinessGuidance(tasks.data.readiness).length>0&&
+            <div className="guidance-surface">
+              <h3>Why the batch may be empty</h3>
+              <ul>{readinessGuidance(tasks.data.readiness).map((message:string)=><li key={message}>{message}</li>)}</ul>
+              <p className="muted">These are diagnostic counts, not an exhaustive or additive funnel. A job can fail multiple requirements.</p>
+            </div>}
+        </div>:
+        <p className="muted">Pipeline health appears after the next successful authenticated API refresh.</p>}
+    </section>
     <div className="operations-overview-grid"><section className="workspace-surface">
       <div className="section-title"><div><h2>Daily recommendations</h2>
         <p className="muted">Automatic batch assembly is scheduled for 07:00 Lagos time. Only verified-eligible jobs with source evidence can be delivered.</p>
