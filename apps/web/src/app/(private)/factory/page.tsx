@@ -84,6 +84,8 @@ export default function FactoryFlow(){
  const [view,setView]=useState<'live'|'replay'>('live');
  const [selectedStage,setSelectedStage]=useState<Stage>('eligibility');
  const [eventIndex,setEventIndex]=useState(0);
+ const [replayPlaying,setReplayPlaying]=useState(false);
+ const [replaySpeed,setReplaySpeed]=useState(1);
  const [inspectorTab,setInspectorTab]=useState<'event'|'lineage'>('event');
  const [selectedJob,setSelectedJob]=useState('');
  const [lineage,setLineage]=useState<JobLineage|null>(null);
@@ -115,6 +117,14 @@ export default function FactoryFlow(){
  },[selectedJob,session,flow.data?.observed_at]);
  const events=flow.data?.events||[];
  const replayEvent=events[Math.min(eventIndex,Math.max(0,events.length-1))];
+ useEffect(()=>{
+   if(view!=='replay'||!replayPlaying||events.length<2)return;
+   const timer=setInterval(()=>setEventIndex(index=>index<=0?events.length-1:index-1),Math.max(350,1800/replaySpeed));
+   return ()=>clearInterval(timer);
+ },[view,replayPlaying,events.length,replaySpeed]);
+ useEffect(()=>{
+   if(view==='replay'&&replayPlaying&&replayEvent)setSelectedStage(replayEvent.stage);
+ },[view,replayPlaying,replayEvent?.id]);
  const instrumentedRecent=useMemo(()=>events.filter(e=>
    e.kind==='instrumented'&&Date.now()-Date.parse(e.time)<120000&&Date.now()>=Date.parse(e.time)-5000
  ),[events]);
@@ -129,7 +139,7 @@ export default function FactoryFlow(){
  const payloadBefore=inspectorTab==='event'?currentEvent?.input:jobSnapshot?.before;
  const payloadAfter=inspectorTab==='event'?currentEvent?.output:jobSnapshot?.after;
  function chooseEvent(index:number){
-  setEventIndex(index);setView('replay');setInspectorTab('event');
+  setEventIndex(index);setView('replay');setReplayPlaying(false);setInspectorTab('event');
   const e=events[index];if(e){setSelectedStage(e.stage);if(e.job_id)setSelectedJob(e.job_id);}
  }
  function chooseStage(id:Stage){setSelectedStage(id);setInspectorTab('lineage');}
@@ -157,8 +167,8 @@ export default function FactoryFlow(){
    <div><span className="factory-eyebrow">LIVE TOPOLOGY / 11 STATIONS</span><h2 id="flow-map-title">Processing network</h2><p>Click any station to inspect its execution, fields, and latest recorded transformations.</p></div>
    <div className="factory-v2-controls">
     <div className="factory-v2-segmented" role="group" aria-label="Chart playback mode">
-     <button type="button" className={view==='live'?'active':''} aria-pressed={view==='live'} onClick={()=>setView('live')}>Live map</button>
-     <button type="button" className={view==='replay'?'active':''} aria-pressed={view==='replay'} onClick={()=>setView('replay')}>Replay events</button>
+     <button type="button" className={view==='live'?'active':''} aria-pressed={view==='live'} onClick={()=>{setView('live');setReplayPlaying(false);}}>Live map</button>
+     <button type="button" className={view==='replay'?'active':''} aria-pressed={view==='replay'} onClick={()=>{setView('replay');setEventIndex(Math.max(0,events.length-1));setReplayPlaying(events.length>1);}}>Replay events</button>
     </div>
     <button type="button" className="factory-v2-iconbutton" aria-label={polling?'Pause polling':'Resume polling'} onClick={()=>setPolling(v=>!v)}>{polling?'Ⅱ':'▶'}</button>
     <div className="factory-v2-zoom" aria-label="Chart zoom controls">
@@ -204,8 +214,10 @@ export default function FactoryFlow(){
   </footer>
   {view==='replay'&&<div className="factory-v2-replay">
     <div><b>Historical event replay</b><span>{replayEvent?when(replayEvent.time)+' · '+replayEvent.agent:'No recorded events'}</span></div>
+    <button type="button" className="factory-v2-replay-play" disabled={events.length<2} onClick={()=>setReplayPlaying(v=>!v)}>{replayPlaying?'Ⅱ Pause':'▶ Play'}</button>
     <input type="range" min={0} max={Math.max(0,events.length-1)} step={1} value={Math.min(eventIndex,Math.max(0,events.length-1))} disabled={!events.length} aria-label="Replay recorded event" onChange={e=>chooseEvent(Number(e.target.value))}/>
     <span>{events.length?String(Math.min(eventIndex+1,events.length))+' / '+events.length:'0 / 0'}</span>
+    <select aria-label="Replay speed" value={replaySpeed} onChange={e=>setReplaySpeed(Number(e.target.value))}><option value={1}>1×</option><option value={2}>2×</option><option value={4}>4×</option></select>
   </div>}
  </section>
  <div className="factory-v2-grid">
