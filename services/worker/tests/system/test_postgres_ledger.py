@@ -30,8 +30,8 @@ def test_pg_exhausted_expired_lease_reaches_terminal_failure():
         task=ledger.enqueue('test',key,{'sample':'lease'},max_attempts=1)
         assert ledger.claim('failed-worker',lease_seconds=1)['id']==task
         with ledger.conn.transaction():
-            ledger.conn.execute("UPDATE workflow_tasks SET lease_until=now()-interval '1 second' WHERE id=%s",(task,))
+            ledger.conn.execute("UPDATE ci_workflow_tasks SET lease_until=now()-interval '1 second' WHERE id=%s",(task,))
         assert ledger.claim('recovery-worker') is None
         assert ledger.task(task)['state']=='failed'
-        events=ledger.conn.execute("SELECT event_type FROM task_events WHERE task_id=%s ORDER BY id",(task,)).fetchall()
+        events=ledger.conn.execute("SELECT event_type FROM ci_task_events WHERE task_id=%s ORDER BY id",(task,)).fetchall()
         assert events[-1]['event_type']=='failed'

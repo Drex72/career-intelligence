@@ -40,3 +40,28 @@
 - [ ] Set job discovery and source-rate limits based on observed free quotas.
 - [ ] Confirm the platform degrades to deterministic screening when local AI is offline.
 - [ ] Record actual cloud usage before claiming that 100 eligible employers daily is sustainable at zero cost.
+
+## Shared Groundwork Supabase database (`ci_` namespace)
+
+Career Intelligence is configured to share the **Groundwork** Supabase project
+only after the correct project reference has been verified. Its PostgreSQL
+objects live in `public` and carry the `ci_` prefix (for example,
+`ci_companies`, `ci_jobs`, `ci_workflow_tasks`, `ci_outreach_drafts`).
+
+- Do **not** run pre-namespace migrations from older commits on a shared database.
+- Do **not** apply the migrations to a project whose identity is not verified as Groundwork.
+- Never use `REVOKE ... ON ALL TABLES IN SCHEMA public`, drop unrelated tables,
+  or change Groundwork's existing policies. Versioned migrations only alter
+  explicit `ci_` objects.
+- Use only a server-side connection to `ci_` operational tables; do not expose
+  a service-role credential in the browser. By default RLS denies client reads
+  except explicit owner-scoped application/delivery tables.
+- Before deployment, run migrations against a disposable PostgreSQL database
+  containing a pre-existing non-`ci_` table and granted client permissions;
+  verify its data and permissions remain unchanged.
+- Apply approved migrations to Groundwork using a protected database
+  connection **after** verifying the project ID and taking a restorable backup.
+- The local SQLite mode is a separate development adapter with unprefixed
+  internal tables, **not** the shared Supabase schema.
+
+Never commit the Groundwork connection string, API keys, or Obsidian vault.
