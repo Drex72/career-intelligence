@@ -14,8 +14,8 @@ export function Status({value}:{value:string|null|undefined}){
   const kind=v.replace(/[^a-z_]/g,'');
   return <span className={'status status-'+kind}><span className="status-dot" aria-hidden="true"/>{formatStatus(v)}</span>;
 }
-export function StateNotice({loading,error}:{loading:boolean;error:string|null}){
+export function StateNotice({loading,error,retry}:{loading:boolean;error:string|null;retry?:()=>void}){
   if(loading)return <div className="loading-state" role="status" aria-live="polite"><span className="loading-spinner" aria-hidden="true"/>Loading live records…</div>;
-  if(error)return <div className="error-message" role="alert"><strong>Unable to load data.</strong> {error}</div>;
+  if(error)return <div className="error-message" role="alert"><strong>Unable to load data.</strong> {error}{retry&&<button type="button" className="retry-button" onClick={retry}>Try again</button>}</div>;
   return null;
 }
