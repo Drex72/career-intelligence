@@ -398,3 +398,9 @@ input::placeholder,textarea::placeholder{color:#667586}
  .mobile-nav-link{color:#526579}
  .story-footer{color:#c4dced}
 }
+
+
+/* Recoverable request failure affordance */
+.retry-button{display:inline-flex;align-items:center;justify-content:center;min-height:34px;margin-left:14px;padding:6px 12px;border-radius:7px;border:1px solid #d8a6ad;background:#fff;color:#92323c;font-size:12px;font-weight:700}
+.retry-button:hover{background:#fce7e9}
+@media(max-width:480px){.retry-button{display:flex;margin:12px 0 0;min-height:44px}}
