@@ -33,7 +33,7 @@ create or replace function ci_ingest_ats_job(
   p_company text, p_title text, p_url text,
   p_published_at timestamptz, p_remote_text text
 ) returns uuid language plpgsql security invoker set search_path=public as $$
-declare company_id uuid; job_id uuid; source_url_ok boolean;
+declare company_id uuid; v_job_id uuid; source_url_ok boolean;
 begin
   if p_provider not in ('greenhouse','lever','ashby') or
      p_board is null or p_board !~ '^[A-Za-z0-9_-]{1,100}$' or
@@ -71,17 +71,17 @@ begin
     title=excluded.title,remote_text=excluded.remote_text,
     last_verified_at=now(),
     status=case when ci_jobs.status='closed' then 'open' else ci_jobs.status end
-  returning id into job_id;
+  returning id into v_job_id;
   insert into ci_job_sources(job_id,source_name,source_job_id,source_url)
-  values(job_id,p_provider,p_board||':'||p_source_job_id,p_url)
+  values(v_job_id,p_provider,p_board||':'||p_source_job_id,p_url)
   on conflict(source_name,source_job_id) where source_job_id is not null
   do update set retrieved_at=now(),source_url=excluded.source_url;
   insert into ci_eligibility_review_queue(job_id)
-    select job_id where not exists (
-      select 1 from ci_eligibility_assessments e where e.job_id=job_id
+    select v_job_id where not exists (
+      select 1 from ci_eligibility_assessments e where e.job_id=v_job_id
     )
     on conflict(job_id) do update set last_seen_at=now();
-  return job_id;
+  return v_job_id;
 end;
 $;
 revoke all on function ci_ingest_ats_job(text,text,text,text,text,text,timestamptz,text)
