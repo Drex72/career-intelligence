@@ -45,5 +45,7 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_postgres_migrations.py -v
       - name: Exercise PostgreSQL worker ledger
         run: python -m pytest services/worker/tests/system/test_postgres_ledger.py -v
+      - name: Verify PostgreSQL company/job catalog and lifetime deliveries
+        run: python -m pytest services/worker/tests/integration/test_postgres_catalog.py -v
       - name: Exercise six-role LangGraph routing and checkpoints
         run: python -m pytest services/worker/tests/integration/test_langgraph_runtime.py -v
