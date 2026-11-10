@@ -63,6 +63,8 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_postgres_signed_worker.py -v
       - name: Verify verified-job matching and people task handoff
         run: python -m pytest services/worker/tests/integration/test_postgres_verified_handoff.py -v
+      - name: Verify daily Himalayas source attribution and private ingestion
+        run: python -m pytest services/worker/tests/integration/test_postgres_himalayas.py -v
       - name: Verify source registry migration and board metadata
         run: python -m pytest services/worker/tests/integration/test_postgres_sources.py -v
       - name: Verify versioned private knowledge ingestion
