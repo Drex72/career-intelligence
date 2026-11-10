@@ -24,3 +24,13 @@ This milestone implements the **hybrid authorization gate** without sending an e
 The backend owner-authenticated Supabase Edge Function handles two routes, with matching allowlist additions in the Next.js same-origin proxy. A subsequent UI change can provide an accessible approve-and-queue workflow; UI PR #19 is owned by a separate agent and is not modified here.
 
 This migration is additive and affects only `ci_` objects in the shared Groundwork Supabase database. Unit and disposable PostgreSQL integration tests cover owner isolation, application gating, identity and email verification, suppression, quotas, and idempotency.
+
+## Owner revocation and status inspection (migration 0023)
+
+- `POST /api/ci/outreach/revoke` with `{"draft_id":"<uuid>"}` revokes active approval and cancels only unsent, pending intents. Owner authentication is required.
+- A `sending_unknown` result returns `reconciliation_required` and is **not** automatically cancelled, retried or marked sent.
+- A `sent` result returns `already_sent`; cancelling future approval cannot recall delivered email.
+- `GET /api/ci/outreach` now returns `drafts`, `approvals` (active approvals only), and `intents` (status metadata without contact email values), always scoped to the current owner.
+- Functions are granted exclusively to `service_role`. The browser never receives a dispatch credential or unrestricted SQL access.
+
+No Gmail calls or new OAuth scopes are introduced. The separate UI agent may implement visible approval/revoke controls using this API contract without rewriting the backend.
