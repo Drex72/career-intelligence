@@ -37,6 +37,15 @@ class PostgresTaskLedger:
     def claim(self,worker:str,lease_seconds:int=120)->dict|None:
         if not worker or not 1<=lease_seconds<=3600:raise ValueError('invalid worker lease')
         with self.conn.transaction():
+            # A crashed worker on its final attempt must not leave a permanent
+            # 'running' record that no subsequent worker can claim.
+            exhausted=self.conn.execute('''UPDATE workflow_tasks
+                 SET state='failed',worker_id=NULL,lease_until=NULL,updated_at=now()
+                 WHERE state='running' AND lease_until<=now()
+                   AND attempt_count>=max_attempts RETURNING id''').fetchall()
+            for expired in exhausted:
+                self.conn.execute('''INSERT INTO task_events(task_id,event_type,payload)
+                     VALUES(%s,'failed',%s)''',(expired['id'],json.dumps({'error_code':'expired_final_lease'})))
             row=self.conn.execute('''WITH candidate AS (
                 SELECT t.id FROM workflow_tasks t
                 WHERE (t.state='pending' OR (t.state='retry_wait' AND t.next_retry_at<=now())
