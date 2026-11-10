@@ -23,7 +23,7 @@ export function OpportunityDataTable({jobs,onInspect,selectedId,empty}:{jobs:Opp
    }},
    {id:'eligibility',header:'Eligibility',accessorFn:r=>r.eligibility||'unverified',cell:ctx=>{
       const r=ctx.row.original;
-      return <div className="eligibility-cell"><Status value={r.eligibility}/>
+      return <div className="eligibility-cell"><Status value={r.eligibility_expired?'expired':r.eligibility}/>
         {r.eligibility_expired&&<Badge color="amber" variant="soft">Expired</Badge>}
         {r.eligibility_reason&&<span className="eligibility-reason">{r.eligibility_reason}</span>}
       </div>;
