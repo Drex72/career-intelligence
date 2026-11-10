@@ -60,7 +60,7 @@ export default function Opportunities(){
     }
   }
   const jobs=data?.jobs||[];
-  const filtered=filterOpportunities(jobs,search,filter);
+  const filtered=filterOpportunities(jobs,search,filter) as Job[];
   const selectedJob=jobs.find(j=>j.id===selected);
   return <div className="opportunity-page">
     <PageHeading meta="DISCOVER / EVALUATE" title="Find your next opportunity." description="Research employers, compare roles, and verify hiring eligibility before you apply."
