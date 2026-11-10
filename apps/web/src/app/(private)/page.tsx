@@ -52,7 +52,7 @@ export default function Overview(){
           {key:'company',label:'Employer',render:r=><div className="table-primary"><span className="company-avatar" aria-hidden="true">{r.company_name.charAt(0).toUpperCase()}</span><strong>{r.company_name}</strong></div>},
           {key:'job',label:'Role',render:r=><span className="role-name">{r.title}</span>},
           {key:'published',label:'Published',render:r=><span className="muted">{safeDateLabel(r.published_at)}</span>},
-          {key:'link',label:'Next step',render:r=><a href={r.apply_url} rel="noopener noreferrer" target="_blank" className="table-action">View posting <span aria-hidden="true">↗</span></a>},
+          {key:'link',label:'Next step',render:r=>r.apply_url?.startsWith("https://")?<a href={r.apply_url} rel="noopener noreferrer" target="_blank" className="table-action">View posting <span aria-hidden="true">↗</span></a>:<span className="muted">Link unavailable</span>},
         ]} empty="No verified eligible employers were delivered today. You can browse current opportunities while the system continues researching."/>}
         <div className="surface-foot"><InsetLink href="/opportunities">See all opportunities</InsetLink></div>
       </section>
