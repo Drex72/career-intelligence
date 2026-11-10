@@ -5,6 +5,8 @@ const a='00000000-0000-4000-8000-000000000001';
 test('routes only enumerated paths',()=>{
  assert.deepEqual(route('https://localhost/functions/v1/ci-api/api/ci/jobs','GET'),{type:'read',path:'jobs'});
  assert.deepEqual(route('https://localhost/functions/v1/ci-api/api/ci/batches/2026-11-10','GET'),{type:'batch',day:'2026-11-10'});
+ assert.deepEqual(route('https://localhost/api/ci/discover','POST'),{type:'discover'});
+ assert.equal(route('https://localhost/api/ci/discover','GET'),null);
  assert.equal(route('https://localhost/api/ci/outreach/send','POST'),null);
  assert.equal(route('https://localhost/api/ci/../secret','GET'),null);
 });

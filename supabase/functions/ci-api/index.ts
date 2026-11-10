@@ -48,14 +48,16 @@ Deno.serve(async (request:Request)=>{
         const jobs=list(check(await db.from('ci_jobs').select('id,title,apply_url,status,published_at,first_seen_at,company_id,ci_companies(legal_name)').order('published_at',{ascending:false,nullsFirst:false}).limit(limit)));
         const ids=jobs.map((x:any)=>x.id);
         if(!ids.length)return reply(200,{jobs:[]});
-        const [e,m]=await Promise.all([
+        const [e,m,sources]=await Promise.all([
           db.from('ci_eligibility_assessments').select('job_id,status,assessed_at').in('job_id',ids).order('assessed_at',{ascending:false}).limit(1000),
           db.from('ci_job_matches').select('job_id,score,computed_at').in('job_id',ids).order('computed_at',{ascending:false}).limit(1000),
+          db.from('ci_job_sources').select('job_id,source_name').in('job_id',ids).order('retrieved_at',{ascending:false}).limit(1000),
         ]);
-        const es=new Map<string,string>(),ms=new Map<string,number>();
+        const es=new Map<string,string>(),ms=new Map<string,number>(),ss=new Map<string,string>();
         for(const item of list(check(e)))if(!es.has(item.job_id))es.set(item.job_id,item.status);
         for(const item of list(check(m)))if(!ms.has(item.job_id))ms.set(item.job_id,item.score);
-        return reply(200,{jobs:jobs.map((j:any)=>({id:j.id,title:j.title,apply_url:j.apply_url,status:j.status,published_at:j.published_at,first_seen_at:j.first_seen_at,company_id:j.company_id,company_name:j.ci_companies?.legal_name||'',eligibility:es.get(j.id)||null,match_score:ms.get(j.id)||0}))});
+        for(const item of list(check(sources)))if(!ss.has(item.job_id))ss.set(item.job_id,item.source_name);
+        return reply(200,{jobs:jobs.map((j:any)=>({id:j.id,title:j.title,apply_url:j.apply_url,status:j.status,published_at:j.published_at,first_seen_at:j.first_seen_at,company_id:j.company_id,company_name:j.ci_companies?.legal_name||'',eligibility:es.get(j.id)||null,match_score:ms.get(j.id)||0,source:ss.get(j.id)||'unknown'}))});
       }
       if(path==='people'){
         const xs=list(check(await db.from('ci_contacts').select('id,name,current_title,profile_url,company_id,identity_verified,ci_companies(legal_name)').order('created_at',{ascending:false}).limit(100)));
@@ -82,6 +84,47 @@ Deno.serve(async (request:Request)=>{
       if(!bs.length)return reply(200,{items:[]});
       const xs=list(check(await db.from('ci_daily_batch_items').select('job_id,company_id,rank,ci_jobs(title,apply_url,published_at),ci_companies(legal_name)').eq('batch_id',bs[0].id).order('rank').limit(100)));
       return reply(200,{items:xs.map((x:any)=>({job_id:x.job_id,company_id:x.company_id,rank:x.rank,title:x.ci_jobs?.title||'',apply_url:x.ci_jobs?.apply_url||'',published_at:x.ci_jobs?.published_at||null,company_name:x.ci_companies?.legal_name||''}))});
+    }
+    if(operation.type==='discover'){
+      // Remotive's public API asks clients to limit requests to four/day and attribute source.
+      // This is an owner-initiated, bounded ingestion. Listings remain unverified.
+      const gate=check(await db.rpc('ci_claim_feed_slot',{p_action:'remotive'}));
+      if(!gate)return reply(429,{error:'The public job source can only be checked once every six hours'});
+      let data:any;
+      try{
+        const ctl=AbortSignal.timeout(15000);
+        const response=await fetch('https://remotive.com/api/remote-jobs?category=software-dev&limit=100',
+          {headers:{'user-agent':'CareerIntelligencePersonalResearch/0.5'},redirect:'error',signal:ctl});
+        if(!response.ok)return reply(502,{error:'Job source temporarily unavailable'});
+        data=await response.json();
+      }catch{return reply(502,{error:'Job source temporarily unavailable'});}
+      if(!Array.isArray(data?.jobs))return reply(502,{error:'Unexpected job source format'});
+      let imported=0,skipped=0;
+      const now=Date.now();
+      for(const job of data.jobs.slice(0,100)){
+        const title=String(job?.title||'').trim();
+        const company=String(job?.company_name||'').trim();
+        const raw=String(job?.publication_date||'');
+        const hasOffset=/(?:Z|[+-]\d{2}:\d{2})$/.test(raw);
+        const date=new Date(hasOffset?raw:raw+'Z');
+        const sourceId=String(job?.id||'');
+        let src:URL;
+        try{src=new URL(String(job?.url||''));}catch{skipped++;continue;}
+        if(src.protocol!=='https:'||src.hostname!=='remotive.com'||
+          !src.pathname.startsWith('/remote-jobs/')||!Number.isFinite(date.getTime())||
+          date.getTime()<now-7*86400000||date.getTime()>now+86400000||
+          !/engineer|developer|platform|devops|infrastructure|machine learning|research/i.test(title)){
+          skipped++;continue;
+        }
+        const ingested=await db.rpc('ci_ingest_remotive_job',{
+          p_source_id:sourceId,p_company:company,p_title:title,
+          p_url:src.origin+src.pathname,p_published_at:date.toISOString(),
+          p_location:String(job?.candidate_required_location||'').slice(0,500),
+        });
+        if(ingested.error||!ingested.data)skipped++;else imported++;
+      }
+      return reply(200,{source:'Remotive',imported,skipped,checked:Math.min(data.jobs.length,100),
+        note:'These are public listings only. Hiring eligibility has not been verified.'});
     }
     let body:any;
     try{body=await request.json();}catch{return reply(400,{error:'Invalid JSON body'});}
