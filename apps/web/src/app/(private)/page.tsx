@@ -40,14 +40,14 @@ export default function Overview(){
     <section aria-label="Workspace metrics" className="metric-layout">
       {metrics.map(metric=><MetricTile key={metric.label} {...metric}/>)}
     </section>
-    <StateNotice loading={stats.loading} error={stats.error}/>
+    <StateNotice loading={stats.loading} error={stats.error} retry={stats.reload}/>
     <div className="overview-columns">
       <section className="workspace-surface recommendations-surface">
         <SectionHeading title="Today's recommendations" description="Evidence-verified roles from employers you haven't been sent before."
           action={<button type="button" className="button-secondary" disabled={generating} onClick={()=>void generateBatch()}>{generating?'Generating…':'Generate batch'}</button>}/>
         {batchNotice&&<Notice tone="success">{batchNotice}</Notice>}
         {batchError&&<Notice tone="danger">{batchError}</Notice>}
-        <StateNotice loading={batch.loading} error={batch.error}/>
+        <StateNotice loading={batch.loading} error={batch.error} retry={batch.reload}/>
         {batch.data&&<ResourceTable rowKey={r=>r.job_id} ariaLabel="Today's recommended employers" items={batch.data.items} columns={[
           {key:'company',label:'Employer',render:r=><div className="table-primary"><span className="company-avatar" aria-hidden="true">{r.company_name.charAt(0).toUpperCase()}</span><strong>{r.company_name}</strong></div>},
           {key:'job',label:'Role',render:r=><span className="role-name">{r.title}</span>},
