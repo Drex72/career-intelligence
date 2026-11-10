@@ -8,7 +8,7 @@ import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
 import {candidateBoards} from './candidates.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription} from './eligibility.mjs';
 import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
-import {normalizeHimalayas,safeHimalayasCursor} from './himalayas.mjs';
+import {normalizeHimalayas,safeHimalayasCursor,isSoftwareRole} from './himalayas.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
 const response=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
@@ -40,7 +40,7 @@ function remotiveRole(job:any,stamp:number){
   try{u=new URL(String(job?.url||''));}catch{return null;}
   if(!/^\d{1,30}$/.test(id)||company.length<2||company.length>180||
      title.length<3||title.length>250 ||
-     !/engineer|developer|platform|devops|infrastructure|machine learning|research|software|backend|frontend|security/i.test(title)||
+     !isSoftwareRole(title)||
      u.protocol!=='https:'||u.hostname!=='remotive.com'||!u.pathname.startsWith('/remote-jobs/')||
      u.username||u.password||u.port||!Number.isFinite(time)||
      time<stamp-7*86400_000||time>stamp+86400_000)return null;
