@@ -1,0 +1,24 @@
+name: Live Career Intelligence API Denial Smoke
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-edge-auth-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Unauthenticated requests must not read private career data
+        env:
+          CI_PUBLIC_EDGE: https://manqpbwiwmzqxgldhbdt.supabase.co/functions/v1/ci-api/api/ci/metrics
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl --proto '=https' --tlsv1.2 -sS --max-time 15 --output /dev/null --write-out '%{http_code}' "$CI_PUBLIC_EDGE")"
+          test "$code" = "401" || { echo "Expected 401 without authentication; received $code"; exit 1; }
+          code="$(curl --proto '=https' --tlsv1.2 -sS --max-time 15 --output /dev/null --write-out '%{http_code}' -H 'Authorization: Bearer definitely-invalid' "$CI_PUBLIC_EDGE")"
+          test "$code" = "401" || { echo "Expected 401 for malformed token; received $code"; exit 1; }
+          echo 'Supabase gateway denied unauthenticated and invalid JWT requests.'
