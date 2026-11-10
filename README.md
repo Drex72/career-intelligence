@@ -1,6 +1,6 @@
 # Career Intelligence — self-hosted personal job research
 
-**Implementation status (10 Nov 2026):** Testable local single-user application with an authenticated dashboard, real public-ATS/Remotive retrieval adapters, evidence-gated jobs, application tracking, knowledge-vault ingestion, automatic contact-research queues, optional Apollo discovery, outreach drafting, and a guarded Gmail dispatch adapter. **Not a production-ready or remotely deployed PRD v0.5 system.** See [Remaining integration work](#remaining-integration-work).
+**Implementation status (10 Nov 2026; GitHub draft PR #1):** Testable local single-user application with an authenticated dashboard, real public-ATS/Remotive retrieval adapters, evidence-gated jobs, application tracking, knowledge-vault ingestion, automatic contact-research queues, optional Apollo discovery, outreach drafting, and a guarded Gmail dispatch adapter. **Not a production-ready or remotely deployed PRD v0.5 system.** See [Remaining integration work](#remaining-integration-work).
 
 The platform defaults to **zero paid requests and zero outgoing emails**. Do not load private knowledge or real Gmail credentials into public/shared hosting.
 
@@ -94,3 +94,7 @@ This operator step creates `Drex72/career-intelligence`, pushes `main` and the f
 PRD v0.5 complete delivery still requires: provisioning a **new** private GitHub repo; live PostgreSQL/Supabase migration testing and owner-scoped RLS, persistent LangGraph checkpoint integration, scalable cloud scheduler and authenticated remote UI, Obsidian Git synchronization, tested remote deployment with rollback, robust employer and contact research, and real Gmail OAuth verification and send reconciliation. Paid services and email automation must remain disabled until separately validated and configured.
 
 See `docs/superpowers/plans/` for the approved feature plans and `docs/DEPLOYMENT.md` for a provisioning checklist.
+
+## GitHub source and safety
+
+The application repository at https://github.com/Drex72/career-intelligence is **public**. Draft PR #1 contains the testable local foundation, not a production deployment. Never commit a filled `.env`, OAuth access tokens, imported emails, personal contacts, or private Obsidian knowledge. Store approved personal notes in a separately access-controlled private repository. Production database, remote authentication, and LangGraph checkpointing still require integration tests before deployment.

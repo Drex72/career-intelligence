@@ -124,21 +124,22 @@ class CareerPlatform:
         self.db.execute('BEGIN IMMEDIATE')
         try:
             existing=self.daily_batch(owner,day)
-            if existing:
+            remaining=max(0,target-len(existing))
+            if not remaining:
                 self.db.commit();return existing
             rows=_rows(self.db.execute('''SELECT j.*,c.name company_name,c.domain company_domain FROM jobs j JOIN companies c ON c.id=j.company_id
                   WHERE j.eligibility='verified_eligible' AND j.status='open'
                   AND c.id NOT IN (SELECT company_id FROM batches WHERE owner=?)
                   AND j.id NOT IN (SELECT job_id FROM batches WHERE owner=?)
-                  ORDER BY j.score DESC, j.published_at DESC LIMIT ?''',(owner,owner,target*10)))
-            seen=set();selected=[]
+                  ORDER BY j.score DESC, j.published_at DESC LIMIT ?''',(owner,owner,remaining*10)))
+            seen={j['company_id'] for j in existing};selected=[]
             for j in rows:
                 if j['company_id'] in seen: continue
                 seen.add(j['company_id']);selected.append(j)
-                self.db.execute('INSERT INTO batches(owner,day,company_id,job_id,rank) VALUES(?,?,?,?,?)',(owner,day,j['company_id'],j['id'],len(selected)))
-                if len(selected)>=target: break
+                self.db.execute('INSERT INTO batches(owner,day,company_id,job_id,rank) VALUES(?,?,?,?,?)',(owner,day,j['company_id'],j['id'],len(existing)+len(selected)))
+                if len(selected)>=remaining: break
             self._event('batch_generated',day,{'count':len(selected),'owner':owner})
-            self.db.commit();return selected
+            self.db.commit();return self.daily_batch(owner,day)
         except Exception:
             self.db.rollback();raise
 

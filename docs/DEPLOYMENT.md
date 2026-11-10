@@ -3,11 +3,11 @@
 **No production deployment is present.** The current Docker configuration is a convenience for localhost evaluation. `compose.yaml` binds loopback and persists `/data`; it does not provide HTTPS, authentication sessions, monitoring, or managed backups.
 
 ## GitHub
-- [ ] Authenticate the `Drex72` account with `gh auth login` in a connected development environment.
-- [ ] Review code for secrets and personal data (`git grep` and local `.env` exclusions).
-- [ ] Run `scripts/publish-github.sh` to create the private repository and draft feature PR.
-- [ ] Confirm CI is green, review the PR, and merge only after review.
-- [ ] Create a **separate private repository** for approved Obsidian knowledge; never push the unapproved private notes directory.
+- [x] Publish source on `Drex72/career-intelligence` using the GitHub integration. The repository is **public**; never commit private Obsidian data.
+- [x] Open draft PR #1 from `feat/discovery-foundation` to `main`.
+- [x] Initial GitHub Actions Python test workflow completed successfully.
+- [ ] Review the PR and new commits before merging.
+- [ ] Create a **separate private repository** for approved Obsidian knowledge; never push private notes to this public repository.
 
 ## Database / Supabase
 - [ ] Explicitly select an organization and confirm project price is $0 before creating a dedicated project. Do not reuse unrelated user projects.

@@ -100,3 +100,23 @@ def test_rejected_application_cannot_trigger_auto_outreach(tmp_path):
         draft=app.draft_email('o',jid,contact,'Hello','Hi')
         app.configure_auto_send('o',enabled=True)
         assert not app.authorize_message(draft,'auto')
+
+
+def test_daily_batch_top_up_after_new_eligible_company_without_repeating_previous(tmp_path):
+    with CareerPlatform(tmp_path/'batch.db') as app:
+        a = app.record_job(source='test', source_job_id='a', company_name='Alpha',
+            company_domain='alpha.example', title='Backend Engineer', description='Remote Nigeria',
+            apply_url='https://alpha.example/jobs/a', remote_text='Remote Nigeria',
+            published_at=NOW.isoformat(), now=NOW)
+        app.set_eligibility(a, 'verified_eligible', 'Official policy', 'https://alpha.example/policy')
+        first = app.generate_batch('owner', '2026-11-10', target=2)
+        assert [j['id'] for j in first] == [a]
+        b = app.record_job(source='test', source_job_id='b', company_name='Beta',
+            company_domain='beta.example', title='Platform Engineer', description='Remote Nigeria',
+            apply_url='https://beta.example/jobs/b', remote_text='Remote Nigeria',
+            published_at=NOW.isoformat(), now=NOW)
+        app.set_eligibility(b, 'verified_eligible', 'Official policy', 'https://beta.example/policy')
+        second = app.generate_batch('owner', '2026-11-10', target=2)
+        assert [j['id'] for j in second] == [a, b]
+        assert app.generate_batch('owner', '2026-11-10', target=2) == second
+        assert app.generate_batch('owner', '2026-11-11', target=2) == []
