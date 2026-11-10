@@ -76,7 +76,7 @@ export default function Opportunities(){
           {filters.map(f=><button type="button" key={f.id} className={'filter-tab '+(filter===f.id?'is-selected':'')} aria-pressed={filter===f.id} onClick={()=>setFilter(f.id)}>{f.label}</button>)}
         </div>
       </div>
-      <StateNotice loading={loading} error={error}/>
+      <StateNotice loading={loading} error={error} retry={reload}/>
       {!loading&&!error&&<ResourceTable rowKey={r=>r.id} ariaLabel="Matching opportunities" items={filtered} columns={[
         {key:'employer',label:'Employer & role',render:r=><div className="job-identity"><span className="company-avatar" aria-hidden="true">{r.company_name.charAt(0).toUpperCase()}</span><div><strong>{r.title}</strong><span>{r.company_name}</span></div></div>},
         {key:'status',label:'Hiring eligibility',render:r=><Status value={r.eligibility}/>},
