@@ -296,6 +296,18 @@ class PostgresCareerCatalog:
         return [{**dict(x),'id':str(x['id']),'job_id':str(x['job_id']),
                   'contact_id':str(x['contact_id'])} for x in rows]
 
+    def list_conversations(self, owner: UUID, limit: int = 100) -> list[dict]:
+        if not 1 <= limit <= 500:
+            raise ValueError('limit must be 1..500')
+        rows=self.conn.execute("""SELECT ev.id,ev.event_type,ev.occurred_at,ev.evidence,
+                j.title,c.legal_name AS company_name,p.name AS contact_name
+            FROM ci_conversation_events ev
+            LEFT JOIN ci_jobs j ON j.id=ev.job_id
+            LEFT JOIN ci_companies c ON c.id=j.company_id
+            LEFT JOIN ci_contacts p ON p.id=ev.contact_id
+            WHERE ev.owner_user_id=%s ORDER BY ev.occurred_at DESC LIMIT %s""",(owner,limit)).fetchall()
+        return [{**dict(row),'id':str(row['id'])} for row in rows]
+
     def operations(self) -> dict:
         rows=self.conn.execute('SELECT state,count(*) as total FROM ci_workflow_tasks GROUP BY state').fetchall()
         return {r['state']:r['total'] for r in rows}

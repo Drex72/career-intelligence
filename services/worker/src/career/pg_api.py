@@ -8,6 +8,13 @@ from uuid import UUID
 from career.persistence.postgres_catalog import PostgresCareerCatalog
 
 
+class ReplyInput(BaseModel):
+    job_id: UUID
+    contact_id: UUID
+    body: str = Field(min_length=1,max_length=4000)
+    source_url: str = Field(min_length=10,max_length=1000)
+
+
 class DraftRequest(BaseModel):
     job_id: UUID
     contact_id: UUID
@@ -82,6 +89,21 @@ def make_pg_app(dsn: str, owner_auth, *, store_factory=PostgresCareerCatalog) ->
         with store_factory(dsn) as catalog:
             try:
                 return {'id':prepare_pg_draft(catalog,owner,str(body.job_id),str(body.contact_id))}
+            except ValueError as error:
+                raise HTTPException(status_code=422,detail=str(error)) from error
+
+    @app.get('/api/ci/conversations')
+    def conversations(owner=Depends(require_owner)):
+        with store_factory(dsn) as catalog:
+            return {'events':catalog.list_conversations(owner)}
+
+    @app.post('/api/ci/conversations')
+    def record_reply(body:ReplyInput,owner=Depends(require_owner)):
+        from career.persistence.pg_conversation import record_pg_reply
+        with store_factory(dsn) as catalog:
+            try:
+                return record_pg_reply(catalog,owner,job_id=str(body.job_id),
+                    contact_id=str(body.contact_id),body=body.body,source_url=body.source_url)
             except ValueError as error:
                 raise HTTPException(status_code=422,detail=str(error)) from error
 
