@@ -6,6 +6,7 @@ import {useCareerSession} from '@/components/AuthGate';
 import {ciFetch} from '@/lib/api';
 import {StateNotice} from '@/components/ResourceTable';
 import {WorkflowStateChart} from '@/components/AnalyticsCharts';
+import {SourceApprovalActions} from '@/components/SourceApprovalActions';
 import {Badge,Button,Card} from '@radix-ui/themes';
 
 type WorkerRun={started_at:string,finished_at:string|null,state:string,details:Record<string,number>};
@@ -130,10 +131,9 @@ export default function Operations(){
       {(candidates.data?.candidates||[]).map(c=><div className="section-title" key={c.id}>
         <div><strong>{c.company_name}</strong><p className="muted">{c.provider} · {c.board_slug}</p>
           <a href={c.evidence_url} target="_blank" rel="noopener noreferrer" className="text-link">View original listing</a></div>
-        <div>
-          <button type="button" className="outline-button" disabled={deciding!==null} onClick={()=>void decideCandidate(c.id,'approved')}>Approve board</button>
-          <button type="button" className="outline-button" disabled={deciding!==null} onClick={()=>void decideCandidate(c.id,'rejected')}>Reject</button>
-        </div>
+        <SourceApprovalActions name={c.company_name} busy={deciding!==null}
+          onApprove={()=>void decideCandidate(c.id,'approved')}
+          onReject={()=>void decideCandidate(c.id,'rejected')}/>
       </div>)}
       {candidates.data?.candidates.length===0&&<p className="muted">No unreviewed source candidates. Check public jobs to look for linked ATS boards.</p>}
     </section>
