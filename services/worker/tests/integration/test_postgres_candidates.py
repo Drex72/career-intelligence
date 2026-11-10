@@ -45,3 +45,24 @@ def test_ats_candidate_is_rejected_and_no_client_privilege():
                 (role,'ci_ats_source_candidates','SELECT')).fetchone()[0]
             assert not db.execute('select has_function_privilege(%s,%s,%s)',
                 (role,'ci_decide_ats_candidate(uuid,text)','EXECUTE')).fetchone()[0]
+
+@pytest.mark.skipif(not os.getenv('PG_TEST_DSN'),reason='isolated PostgreSQL required')
+def test_himalayas_ats_candidate_stays_pending_until_owner_approves():
+    import psycopg
+    slug='himalayas-'+uuid4().hex[:9]
+    url='https://himalayas.app/companies/example-company/jobs/backend-engineer'
+    with psycopg.connect(os.environ['PG_TEST_DSN'],autocommit=True) as db:
+        assert db.execute('select ci_suggest_ats_board(%s,%s,%s,%s)',
+            ('greenhouse',slug,'Example Company',url)).fetchone()[0] is True
+        row=db.execute(
+            'select id,state,source_kind,evidence_url from ci_ats_source_candidates where board_slug=%s',
+            (slug,)).fetchone()
+        assert row[1]=='pending' and row[2]=='himalayas' and row[3]==url
+        assert db.execute('select count(*) from ci_discovery_sources where name=%s',
+            ('ats:greenhouse:'+slug,)).fetchone()[0]==0
+        assert db.execute('select ci_suggest_ats_board(%s,%s,%s,%s)',
+            ('lever',slug+'spoof','Example Company','https://himalayas.app.evil.test/companies/x/jobs/y')).fetchone()[0] is False
+        assert db.execute('select ci_decide_ats_candidate(%s,%s)',
+            (row[0],'rejected')).fetchone()[0] is True
+        assert db.execute('select count(*) from ci_discovery_sources where name=%s',
+            ('ats:greenhouse:'+slug,)).fetchone()[0]==0
