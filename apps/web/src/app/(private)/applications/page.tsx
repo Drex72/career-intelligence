@@ -36,7 +36,7 @@ export default function Applications(){
     <div className="applications-layout">
       <section className="workspace-surface application-history">
         <SectionHeading title="Your applications" description="Positions you're following, from saved through offer."/>
-        <StateNotice loading={apps.loading} error={apps.error}/>
+        <StateNotice loading={apps.loading} error={apps.error} retry={apps.reload}/>
         {apps.data&&<ResourceTable rowKey={r=>r.id} ariaLabel="Application history" items={records} columns={[
           {key:'company',label:'Role and employer',render:r=><div className="job-identity"><span className="company-avatar" aria-hidden="true">{r.company_name.charAt(0).toUpperCase()}</span><div><strong>{r.title}</strong><span>{r.company_name}</span></div></div>},
           {key:'status',label:'Stage',render:r=><Status value={r.status}/>},
@@ -45,7 +45,7 @@ export default function Applications(){
       </section>
       <aside className="workspace-surface application-editor">
         <SectionHeading title="Update an application" description="Record what you've done and keep a useful paper trail."/>
-        <StateNotice loading={jobs.loading} error={jobs.error}/>
+        <StateNotice loading={jobs.loading} error={jobs.error} retry={jobs.reload}/>
         {!jobs.loading&&!jobs.error&&jobs.data?.jobs.length===0&&<Notice title="No discovered jobs yet">Browse opportunities and import a public listing before recording an application.</Notice>}
         <form className="stacked-form" onSubmit={submit}>
           <label>Position<select value={jobId} required onChange={e=>setJobId(e.target.value)}><option value="">Choose a discovered role</option>{(jobs.data?.jobs||[]).map(j=><option key={j.id} value={j.id}>{j.company_name} · {j.title}</option>)}</select></label>
