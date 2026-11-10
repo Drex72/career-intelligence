@@ -10,8 +10,17 @@ export function currentEligibility(latest,hasEvidence,now=Date.now()){
     ?latest.status:'unknown';
   return {status,expired:false,reason:null};
 }
-export function visibleMatchScore(match,eligibility,taskState){
-  if(eligibility?.status!=='verified_eligible'||taskState!=='completed')return 0;
+export function visibleMatchScore(match,eligibility,taskState,currentRevision){
+  if(eligibility?.status!=='verified_eligible'||taskState!=='completed'||
+     !currentRevision||match?.knowledge_revision!==currentRevision)return 0;
   const score=Number(match?.score);
   return Number.isInteger(score)&&score>=0&&score<=100?score:0;
+}
+
+/** Match the worker's exact approved-document hash; deleted notes invalidate old scores. */
+export async function currentApprovedRevision(documents){
+  if(!Array.isArray(documents)||!documents.length)return null;
+  const source=documents.map(doc=>String(doc.path)+':'+String(doc.content_sha)).sort().join('\n');
+  const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(source));
+  return Array.from(new Uint8Array(hash),x=>x.toString(16).padStart(2,'0')).join('');
 }
