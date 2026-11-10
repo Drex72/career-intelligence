@@ -125,8 +125,8 @@ end;
 $intent$;
 
 revoke all on function ci_outreach_draft_ready(uuid,uuid),
-  function ci_approve_outreach_draft(uuid,uuid,text),
-  function ci_prepare_outreach_intent(uuid,uuid) from public,anon,authenticated;
+  ci_approve_outreach_draft(uuid,uuid,text),
+  ci_prepare_outreach_intent(uuid,uuid) from public,anon,authenticated;
 grant execute on function ci_outreach_draft_ready(uuid,uuid),
-  function ci_approve_outreach_draft(uuid,uuid,text),
-  function ci_prepare_outreach_intent(uuid,uuid) to service_role;
+  ci_approve_outreach_draft(uuid,uuid,text),
+  ci_prepare_outreach_intent(uuid,uuid) to service_role;
