@@ -172,7 +172,15 @@ class CareerPlatform:
 
     def configure_auto_send(self,owner,*,enabled,daily_limit=10,max_per_company=1):
         if not 0<=daily_limit<=20 or not 0<=max_per_company<=2: raise ValueError('unsafe limit')
-        self.db.execute('INSERT INTO auto_policies(owner,enabled,daily_limit,company_limit) VALUES(?,?,?,?) ON CONFLICT(owner) DO UPDATE SET enabled=excluded.enabled,daily_limit=excluded.daily_limit,company_limit=excluded.company_limit',(owner,int(enabled),daily_limit,max_per_company))
+        self.db.execute('BEGIN IMMEDIATE')
+        try:
+            self.db.execute('INSERT INTO auto_policies(owner,enabled,daily_limit,company_limit) VALUES(?,?,?,?) ON CONFLICT(owner) DO UPDATE SET enabled=excluded.enabled,daily_limit=excluded.daily_limit,company_limit=excluded.company_limit',(owner,int(enabled),daily_limit,max_per_company))
+            if not enabled:
+                # Revocation invalidates pending auto-approvals permanently.
+                self.db.execute("UPDATE outreach SET status='draft',auth_mode=NULL,approved_at=NULL WHERE owner=? AND auth_mode='auto' AND status='approved'",(owner,))
+            self.db.commit()
+        except Exception:
+            self.db.rollback();raise
 
     def authorize_message(self,draft_id,mode='manual'):
         if mode not in ('manual','auto'): return False
