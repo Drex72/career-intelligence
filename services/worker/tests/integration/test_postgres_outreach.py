@@ -21,7 +21,7 @@ def test_drafting_requires_approved_knowledge_and_matching_company(tmp_path):
         contact=c.add_contact(company,{'name':'Taylor Engineer','title':'Engineering Manager',
             'profile_url':'https://draft-'+suffix+'.example/team/taylor',
             'source':'https://draft-'+suffix+'.example/team'})
-        sync_vault(c,tmp_path,git_sha=suffix)  # isolate approved notes from preceding tests
+        sync_vault(c,tmp_path,git_sha=suffix,allow_empty=True)  # explicit test-only cleanup
         with pytest.raises(ValueError,match='knowledge'):
             prepare_pg_draft(c,owner,job,contact)
         (tmp_path/'00-profile').mkdir()
