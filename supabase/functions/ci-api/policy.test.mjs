@@ -58,3 +58,10 @@ test('candidate registration is read-only, explicit approval is POST-only',()=>{
  assert.deepEqual(route('https://localhost/api/ci/source-candidates/decision','POST'),{type:'decideCandidate'});
  assert.equal(route('https://localhost/api/ci/source-candidates/decision','GET'),null);
 });
+
+test('outreach only authorizes and queues, never sends via public API',()=>{
+  assert.deepEqual(route('https://localhost/functions/v1/ci-api/api/ci/outreach/approve','POST'),{type:'approveOutreach'});
+  assert.deepEqual(route('https://localhost/functions/v1/ci-api/api/ci/outreach/intents','POST'),{type:'prepareOutreachIntent'});
+  assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/outreach/approve','GET'),null);
+  assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/outreach/send','POST'),null);
+});
