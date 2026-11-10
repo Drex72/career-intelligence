@@ -4,7 +4,7 @@
 A calm, credible operating workspace for evaluating real career opportunities, tracking applications, collecting hiring evidence, and managing authorized outreach. This is **an operational product**, not a marketing landing page. Source provenance and eligibility accuracy must remain obvious.
 
 ## Direction
-Light, crisp, editorially restrained, high-information-density when displaying records. The accent is reserved for interactive navigation, focus, and primary actions; never use it to imply that an unverified opportunity is eligible.
+Light, warm, colorful and editorially restrained, with information density appropriate to each workflow. A deep-indigo navigation rail anchors the interface; lavender surfaces, peach, mint and soft-blue cards help distinguish tasks. Violet is used for actions and focus, never to imply that an unverified opportunity is eligible.
 
 ## Canonical ownership
 - **Runtime tokens:** `apps/web/src/app/globals.css` is the canonical token source. This document mirrors the selected values.
@@ -13,22 +13,33 @@ Light, crisp, editorially restrained, high-information-density when displaying r
 - **Auth/data access:** Preserve the existing Supabase and API layers. A visual redesign must not invent records, eligibility signals, success statuses, or mutate the authorization lifecycle.
 - **Locales:** English; dated batch labels use the existing Lagos-local implementation.
 
-## Color tokens
+## Identity and color tokens
+The brand symbol is an original compass/signal shape, in violet and amber: `apps/web/public/brand-mark.svg`. Use that SVG as the navigation mark, login identifier, and favicon.
+
 | Role | Token | Value |
 | --- | --- | --- |
-| Canvas | `--bg` | `#f7f8fa` |
-| App rail and surfaces | `--sidebar`, `--panel` | `#ffffff` |
-| Tinted surface | `--panel2` | `#f3f5f7` |
-| Subtle border | `--border` | `#e5e9ee` |
-| Primary ink | `--text` | `#18232f` |
-| Secondary ink | `--muted` | `#627181` |
-| Interactive blue | `--accent` | `#245b91` |
-| Action tint | `--accent-soft` | `#e9f1fa` |
-| Error | `--danger` | `#b53d42` |
-| Positive evidence | `--success` | `#246b4c` |
+| Lavender canvas | `--bg` | `#F8F6FC` |
+| Indigo navigation | `--sidebar` | `#251F45` |
+| Surface | `--panel` | `#FFFFFF` |
+| Tinted surface | `--panel2` | `#F0ECFC` |
+| Subtle border | `--border` | `#E8E3F1` |
+| Primary ink | `--text` | `#24203C` |
+| Secondary ink | `--muted` | `#605A78` |
+| Action violet | `--accent` | `#7052D7` |
+| Action tint | `--accent-soft` | `#EDE7FC` |
+| Peach | `--peach` | `#FFE4DB` |
+| Lilac | `--lilac` | `#EDE4FF` |
+| Mint | `--mint` | `#E1F4EE` |
+| Warm sunlight | `--sun` | `#FFF0D7` |
 
-## Type and composition
-System-compatible Inter stack; medium-weight body text, tightly tracked headings, tabular figures. Tall navigation rail on desktop and horizontally scrollable navigation on narrow screens. Generous page gutters, compact table rows with readable labels, 14px surface radii, hairline borders, almost imperceptible elevation.
+## Typography and composition
+- **Plus Jakarta Sans** for expressive but restrained headings, strong display numerals and actions.
+- **DM Sans** for legible body copy and dense functional text.
+- Fonts use CSS-hosted Google Fonts with a local system fallback. If offline or the font service is blocked, the interface remains readable.
+- A dark navigation rail contrasts with the warmer content region. Metric tiles alternate between pastel violet, mint, peach and blue. Use color to separate information types, not to suggest fabricated health/success.
+- Avoid all-white page compositions. Reserve pure white for focused input/table surfaces, balanced against a tinted page canvas and supporting accent surfaces.
+- Navigation becomes an explicit expandable menu on narrow screens. Tables scroll in their own region; all destinations stay accessible.
+- Keep semantic status colors for eligibility and errors regardless of the decorative palette.
 
 ## Behavioral contract
 1. **Evidence first:** Verified eligible is distinct from likely/unverified. Do not visually promote unverified opportunities as eligible.
