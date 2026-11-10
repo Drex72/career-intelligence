@@ -14,11 +14,9 @@ class GmailDispatcher:
         db=self.platform.db
         db.execute('BEGIN IMMEDIATE')
         try:
-            row=db.execute('''SELECT o.*,c.email,c.email_verified,a.status application_status,p.enabled auto_enabled FROM outreach o JOIN contacts c ON c.id=o.contact_id LEFT JOIN applications a ON a.owner=o.owner AND a.job_id=o.job_id LEFT JOIN auto_policies p ON p.owner=o.owner WHERE o.id=?''',(draft_id,)).fetchone()
+            row=db.execute('''SELECT o.*,c.email,c.email_verified FROM outreach o JOIN contacts c ON c.id=o.contact_id WHERE o.id=?''',(draft_id,)).fetchone()
             if not row:raise KeyError(draft_id)
-            if (row['status']!='approved' or row['application_status'] not in ('applied','interviewing')
-                or (row['auth_mode']=='auto' and not row['auto_enabled'])
-                or not row['email_verified'] or not row['email']):
+            if row['status']!='approved' or not row['email_verified'] or not row['email']:
                 db.commit();return False
             if db.execute('SELECT 1 FROM suppression WHERE email=?',(row['email'].lower(),)).fetchone():
                 db.commit();return False
