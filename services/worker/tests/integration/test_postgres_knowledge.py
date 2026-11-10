@@ -32,8 +32,8 @@ def test_vault_audit_private_scope_and_changed_revision(tmp_path):
     (tmp_path/'03-skills').mkdir()
     (tmp_path/'07-private').mkdir()
     approved=tmp_path/'03-skills'/'source.md'
-    approved.write_text('---\\nstatus: approved\\nvisibility: matching-safe\\n---\\nPython and backend experience\\n')
-    (tmp_path/'07-private'/'sensitive.md').write_text('---\\nstatus: approved\\nvisibility: agents-safe\\n---\\nNEVER INDEX THIS\\n')
+    approved.write_text('---\nstatus: approved\nvisibility: matching-safe\n---\nPython and backend experience\n')
+    (tmp_path/'07-private'/'sensitive.md').write_text('---\nstatus: approved\nvisibility: agents-safe\n---\nNEVER INDEX THIS\n')
     with PostgresCareerCatalog(os.environ['PG_TEST_DSN']) as catalog:
         assert sync_vault(catalog,tmp_path,git_sha='a'*40)==1
         assert sync_vault(catalog,tmp_path,git_sha='a'*40)==1
@@ -43,7 +43,7 @@ def test_vault_audit_private_scope_and_changed_revision(tmp_path):
           FROM ci_knowledge_sync_runs ORDER BY finished_at DESC,id DESC LIMIT 2''').fetchall()
         assert len(audit)==2
         assert sorted(r['changed_count'] for r in audit)==[0,1]
-        approved.write_text('---\\nstatus: approved\\nvisibility: matching-safe\\n---\\nPython, PostgreSQL and Docker\\n')
+        approved.write_text('---\nstatus: approved\nvisibility: matching-safe\n---\nPython, PostgreSQL and Docker\n')
         assert sync_vault(catalog,tmp_path,git_sha='b'*40)==1
         assert 'Docker' in retrieve_knowledge(catalog,'matching')
         assert 'NEVER INDEX THIS' not in retrieve_knowledge(catalog,'outreach')
