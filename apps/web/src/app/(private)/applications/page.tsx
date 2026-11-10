@@ -4,6 +4,8 @@ import {useResource} from '@/components/useResource';
 import {useCareerSession} from '@/components/AuthGate';
 import {ResourceTable,StateNotice,Status} from '@/components/ResourceTable';
 import {PageHeading,SectionHeading,Notice} from '@/components/WorkspaceUI';
+import {ApplicationStageChart} from '@/components/AnalyticsCharts';
+import {Button,Card} from '@radix-ui/themes';
 import {ciFetch} from '@/lib/api';
 import {safeDateLabel} from '@/lib/data.mjs';
 type Job={id:string;title:string;company_name:string};
@@ -33,6 +35,7 @@ export default function Applications(){
       <div><span>Interviewing</span><strong>{apps.loading?'—':interviews}</strong></div>
       <p>Applications are recorded manually. Career Intelligence never submits one on your behalf.</p>
     </div>
+    <ApplicationStageChart statuses={records.map(r=>r.status)}/>
     <div className="applications-layout">
       <section className="workspace-surface application-history">
         <SectionHeading title="Your applications" description="Positions you're following, from saved through offer."/>
@@ -52,7 +55,7 @@ export default function Applications(){
           <label>Current stage<select value={status} onChange={e=>setStatus(e.target.value)}>{statuses.map(s=><option value={s} key={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}</select></label>
           <label>Notes <span className="optional-label">Optional</span><textarea rows={4} maxLength={1000} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Interview details, next steps, or a follow-up reminder"/></label>
           {message&&<Notice tone="success">{message}</Notice>}{error&&<Notice tone="danger">{error}</Notice>}
-          <button className="button-primary" disabled={busy||!jobId||jobs.loading||Boolean(jobs.error)} type="submit">{busy?'Saving…':'Save application status'}</button>
+          <Button size="3" disabled={busy||!jobId||jobs.loading||Boolean(jobs.error)} type="submit" loading={busy}>{busy?'Saving…':'Save application status'}</Button>
         </form>
       </aside>
     </div>
