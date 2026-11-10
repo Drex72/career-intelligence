@@ -7,18 +7,21 @@ import {StateNotice} from '@/components/ResourceTable';
 
 type Operations={states:Record<string,number>,delivery?:{date:string,state:string,delivered:number,target:number}|null};
 type Source={id:string,name:string,state:string,config:{provider:string,slug:string,company_name:string}};
+type Candidate={id:string,provider:string,board_slug:string,company_name:string,evidence_url:string,state:string};
 type QueueItem={job_id:string,title:string,company_name:string,apply_url:string|null,first_queued_at:string};
 
 export default function Operations(){
   const session=useCareerSession();
   const tasks=useResource<Operations>('operations');
   const sources=useResource<{sources:Source[]}>('sources');
+  const candidates=useResource<{candidates:Candidate[]}>('source-candidates');
   const review=useResource<{items:QueueItem[]}>('eligibility-queue');
   const [provider,setProvider]=useState('greenhouse');
   const [slug,setSlug]=useState('');
   const [company,setCompany]=useState('');
   const [busy,setBusy]=useState(false);
   const [scanning,setScanning]=useState<string|null>(null);
+  const [deciding,setDeciding]=useState<string|null>(null);
   const [reviewing,setReviewing]=useState<string|null>(null);
   const [message,setMessage]=useState('');
   const [error,setError]=useState('');
@@ -47,6 +50,18 @@ export default function Operations(){
     finally{setScanning(null);}
   }
 
+  async function decideCandidate(id:string,decision:'approved'|'rejected'){
+    setDeciding(id);setError('');setMessage('');
+    try{
+      await ciFetch('source-candidates/decision',session,{
+        method:'POST',body:JSON.stringify({candidate_id:id,decision})
+      });
+      setMessage(decision==='approved'?'Source approved. Run a bounded scan to retrieve postings.':'Source rejected.');
+      candidates.reload();sources.reload();
+    }catch(e){setError(e instanceof Error?e.message:'Unable to review source candidate');}
+    finally{setDeciding(null);}
+  }
+
   async function reviewJob(id:string){
     setReviewing(id);setError('');setMessage('');
     try{
@@ -62,7 +77,7 @@ export default function Operations(){
   return <>
     <header className="page-header"><div><span className="eyebrow">WORKFLOW RELIABILITY</span><h1>Agent operations</h1>
       <p className="muted">Real queued tasks and source activity. No simulated metrics.</p></div>
-      <button className="outline-button" onClick={()=>{tasks.reload();sources.reload();review.reload();}}>Refresh</button>
+      <button className="outline-button" onClick={()=>{tasks.reload();sources.reload();review.reload();candidates.reload();}}>Refresh</button>
     </header>
     <StateNotice loading={tasks.loading} error={tasks.error}/>
     <section className="metric-grid">{Object.entries(tasks.data?.states||{}).map(([state,count])=><div className="metric" key={state}>
@@ -98,6 +113,20 @@ export default function Operations(){
         </button>
       </div>)}
       {sources.data?.sources.length===0&&<p className="muted">No ATS boards registered yet. Scans are limited to once every six hours per board.</p>}
+    </section>
+    <section className="panel">
+      <div className="section-title"><div><h2>Discovered ATS candidates</h2>
+        <p className="muted">Possible employer job boards found in attributed public postings. Review each source before activation; company identity is not yet verified.</p></div></div>
+      <StateNotice loading={candidates.loading} error={candidates.error}/>
+      {(candidates.data?.candidates||[]).map(c=><div className="section-title" key={c.id}>
+        <div><strong>{c.company_name}</strong><p className="muted">{c.provider} · {c.board_slug}</p>
+          <a href={c.evidence_url} target="_blank" rel="noopener noreferrer" className="text-link">View original listing</a></div>
+        <div>
+          <button type="button" className="outline-button" disabled={deciding!==null} onClick={()=>void decideCandidate(c.id,'approved')}>Approve board</button>
+          <button type="button" className="outline-button" disabled={deciding!==null} onClick={()=>void decideCandidate(c.id,'rejected')}>Reject</button>
+        </div>
+      </div>)}
+      {candidates.data?.candidates.length===0&&<p className="muted">No unreviewed source candidates. Check public jobs to look for linked ATS boards.</p>}
     </section>
     <section className="panel">
       <div className="section-title"><div><h2>Needs eligibility research</h2>
