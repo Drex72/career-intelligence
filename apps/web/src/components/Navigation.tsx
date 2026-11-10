@@ -34,7 +34,7 @@ export function Navigation(){
   const menuButton=useRef<HTMLButtonElement>(null);
   async function signOut(){await getSupabase().auth.signOut();router.replace('/login');}
   return <aside className="sidebar">
-    <Link href="/" className="brand" aria-label="Career Intelligence home"><span className="brand-mark">C<span>I</span></span>
+    <Link href="/" className="brand" aria-label="Career Intelligence home"><img src="/brand-mark.svg" alt="" className="brand-logo" width={43} height={43}/>
       <span>Career <strong>Intelligence</strong><small>Personal workspace</small></span></Link>
     <button type="button" ref={menuButton} className="mobile-menu-trigger" aria-expanded={mobileOpen} aria-controls={mobileOpen?"mobile-workspace-nav":undefined} onClick={()=>setMobileOpen(open=>!open)}>
       <span>{mobileOpen?'Close menu':'Browse workspace'}</span><span aria-hidden="true">{mobileOpen?'×':'☰'}</span>
