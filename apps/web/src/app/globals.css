@@ -526,3 +526,9 @@ tbody tr:hover{background:#FCF9FF}
  .nav-link{color:#E6DDF6}
 }
 @media(prefers-reduced-motion:reduce){.metric-tile,.workspace-surface{animation:none!important}}
+
+
+.story-brand-logo{width:42px;height:42px;object-fit:contain;filter:drop-shadow(0 4px 12px #1C123C33)}
+.login-brand-logo{width:46px;height:46px;object-fit:contain;margin-bottom:10px}
+.login-layout .login-card .login-brand-logo{display:block}
+@media(max-width:780px){.story-brand-logo{width:36px;height:36px}}
