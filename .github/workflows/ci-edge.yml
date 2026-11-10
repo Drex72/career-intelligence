@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - 'supabase/functions/ci-api/**'
+      - 'supabase/functions/ci-worker/**'
       - 'supabase/migrations/0010_workspace_owners.sql'
       - '.github/workflows/ci-edge.yml'
 permissions:
