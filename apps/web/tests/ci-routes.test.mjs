@@ -27,3 +27,12 @@ test('daily batch generation requires POST',()=>{
  assert.equal(safePath(['batches','generate'],'POST'),'batches/generate');
  assert.equal(safePath(['batches','generate'],'GET'),null);
 });
+
+test('ATS registration and scanning are POST-only and queues are read-only',()=>{
+  assert.equal(safePath(['sources'],'GET'),'sources');
+  assert.equal(safePath(['sources'],'POST'),'sources');
+  assert.equal(safePath(['sources','scan'],'POST'),'sources/scan');
+  assert.equal(safePath(['sources','scan'],'GET'),null);
+  assert.equal(safePath(['eligibility-queue'],'GET'),'eligibility-queue');
+  assert.equal(safePath(['eligibility-queue'],'POST'),null);
+});

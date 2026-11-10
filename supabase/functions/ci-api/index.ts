@@ -1,6 +1,7 @@
 // Career Intelligence server-only gateway. NEVER expose the service-role key.
 import { createClient } from 'npm:@supabase/supabase-js@2.119.0';
-import {route,validApplication,validDraft,validReply,classifyReply,roleRestricted} from './policy.mjs';
+import {route,isUuid,validApplication,validDraft,validReply,classifyReply,roleRestricted} from './policy.mjs';
+import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
 
 const baseHeaders = {'content-type':'application/json; charset=utf-8','cache-control':'no-store, max-age=0','x-content-type-options':'nosniff'};
 const reply=(status:number,payload:unknown)=>new Response(JSON.stringify(payload),{status,headers:baseHeaders});
@@ -33,6 +34,23 @@ Deno.serve(async (request:Request)=>{
   try{
     if(operation.type==='read'){
       const path=operation.path;
+      if(path==='sources'){
+        const sources=list(check(await db.from('ci_discovery_sources')
+          .select('id,name,kind,state,config,first_discovered_at')
+          .eq('kind','ats').order('first_discovered_at',{ascending:false}).limit(50)));
+        return reply(200,{sources});
+      }
+      if(path==='eligibility-queue'){
+        const rows=list(check(await db.from('ci_eligibility_review_queue')
+          .select('job_id,state,first_queued_at,last_seen_at,ci_jobs(id,title,apply_url,company_id,ci_companies(legal_name))')
+          .eq('state','pending').order('first_queued_at').limit(100)));
+        return reply(200,{items:rows.map((x:any)=>({
+          job_id:x.job_id,state:x.state,first_queued_at:x.first_queued_at,
+          title:x.ci_jobs?.title||'Unspecified',
+          company_name:x.ci_jobs?.ci_companies?.legal_name||'Unknown company',
+          apply_url:x.ci_jobs?.apply_url||null
+        }))});
+      }
       if(path==='metrics'){
         const [companies,jobs,delivered,applications]=await Promise.all([
           db.from('ci_companies').select('id',{head:true,count:'exact'}),
@@ -149,6 +167,68 @@ Deno.serve(async (request:Request)=>{
     }
     let body:any;
     try{body=await request.json();}catch{return reply(400,{error:'Invalid JSON body'});}
+    if(operation.type==='registerSource'){
+      if(!validBoard(body))return reply(422,{error:'Valid ATS provider, board slug and company name required'});
+      const company=body.company.trim();
+      const key='ats:'+body.provider+':'+body.slug;
+      const existing=check(await db.from('ci_discovery_sources').select('id,config')
+        .eq('name',key).maybeSingle());
+      if(existing){
+        if(existing.config?.company_name!==company)
+          return reply(409,{error:'ATS source already registered with a different company'});
+        return reply(200,{source_id:existing.id,registered:false});
+      }
+      const count=await db.from('ci_discovery_sources')
+        .select('id',{head:true,count:'exact'}).eq('kind','ats');
+      if(count.error)throw new Error('source count failed');
+      if((count.count??0)>=50)return reply(429,{error:'Maximum 50 ATS boards reached'});
+      const inserted=await db.from('ci_discovery_sources').insert({
+        name:key,kind:'ats',state:'active',discovery_method:'manual',
+        config:{provider:body.provider,slug:body.slug,company_name:company}
+      }).select('id').single();
+      if(inserted.error)return reply(409,{error:'Source already exists or unavailable'});
+      return reply(200,{source_id:inserted.data.id,registered:true});
+    }
+    if(operation.type==='scanSource'){
+      if(!body||!body.source_id||!isUuid(body.source_id))
+        return reply(422,{error:'Valid source UUID required'});
+      const source=check(await db.from('ci_discovery_sources')
+        .select('id,kind,state,config').eq('id',body.source_id).maybeSingle());
+      if(!source||source.kind!=='ats'||source.state!=='active'||!validBoard({
+        provider:source.config?.provider,slug:source.config?.slug,company:source.config?.company_name
+      }))return reply(404,{error:'Registered active ATS board not found'});
+      const gate=check(await db.rpc('ci_claim_ats_slot',{p_source_id:source.id}));
+      if(!gate)return reply(429,{error:'This ATS board can be scanned once every six hours'});
+      let payload:unknown;
+      try{
+        const endpoint=boardEndpoint(source.config.provider,source.config.slug);
+        const response=await fetch(endpoint,{
+          headers:{'accept':'application/json','user-agent':'CareerIntelligenceResearch/0.6'},
+          redirect:'error',signal:AbortSignal.timeout(12000)
+        });
+        if(!response.ok)return reply(502,{error:'ATS source unavailable or rate-limited'});
+        if(Number(response.headers.get('content-length')||0)>2_000_000)
+          return reply(502,{error:'ATS source response too large'});
+        const raw=await response.text();
+        if(raw.length>2_000_000)return reply(502,{error:'ATS source response too large'});
+        payload=JSON.parse(raw);
+      }catch{return reply(502,{error:'ATS source temporarily unavailable'});}
+      let jobs;
+      try{jobs=normalizeBoard(payload,source.config.provider,source.config.slug,source.config.company_name)}
+      catch{return reply(502,{error:'Unexpected ATS listing format'});}
+      let processed=0,rejected=0;
+      for(const job of jobs.slice(0,30)){
+        const result=await db.rpc('ci_ingest_ats_job',{
+          p_provider:job.provider,p_board:job.board,p_source_job_id:job.sourceJobId,
+          p_company:job.company,p_title:job.title,p_url:job.url,
+          p_published_at:job.publishedAt,p_remote_text:job.remoteText
+        });
+        if(result.error||!result.data)rejected++;else processed++;
+      }
+      return reply(200,{source:source.config.provider,board:source.config.slug,
+        processed,rejected,available:jobs.length,
+        note:'Official public ATS listings were recorded and queued for eligibility review. None was automatically deemed eligible for Nigeria.'});
+    }
     if(operation.type==='application'){
       if(!validApplication(body))return reply(422,{detail:'Invalid application input'});
       const j=check(await db.from('ci_jobs').select('company_id').eq('id',body.job_id).maybeSingle());
