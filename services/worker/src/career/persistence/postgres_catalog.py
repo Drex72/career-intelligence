@@ -134,7 +134,7 @@ class PostgresCareerCatalog:
         if source_url:
             canonical_job_url(source_url)
         with self.conn.transaction():
-            row = self.conn.execute('SELECT id FROM ci_jobs WHERE id=%s', (job_id,)).fetchone()
+            row = self.conn.execute('SELECT id,company_id FROM ci_jobs WHERE id=%s', (job_id,)).fetchone()
             if not row:
                 raise KeyError(job_id)
             if source_url and excerpt:
@@ -148,6 +148,9 @@ class PostgresCareerCatalog:
                   (job_id,status,confidence,reasons,contradictions,policy_version)
                   VALUES (%s,%s,%s,%s::jsonb,'[]'::jsonb,%s)''',
                   (job_id,status,confidence,'["'+status+'"]',policy_version))
+            if status=='verified_eligible':
+                self.conn.execute("""INSERT INTO ci_contact_research_tasks(company_id)
+                    VALUES (%s) ON CONFLICT DO NOTHING""", (row['company_id'],))
 
     def create_batch(self, owner: UUID, day: date, target: int = 100) -> list[dict]:
         if not isinstance(owner, UUID) or not isinstance(day, date):
@@ -222,3 +225,32 @@ class PostgresCareerCatalog:
           (SELECT count(*) FROM ci_delivered_companies WHERE owner_user_id=%s) AS delivered,
           (SELECT count(*) FROM ci_applications WHERE owner_user_id=%s) AS applications""",(owner,owner)).fetchone()
         return dict(counts)
+
+    def pending_people(self, limit: int = 10) -> list[dict]:
+        if not 1<=limit<=20:
+            raise ValueError('people research limit must be 1..20')
+        rows=self.conn.execute("""SELECT t.id,t.company_id,c.canonical_domain
+          FROM ci_contact_research_tasks t JOIN ci_companies c ON c.id=t.company_id
+          WHERE t.state='pending' ORDER BY t.created_at LIMIT %s""",(limit,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def resolve_people_task(self,task_id,state:str)->None:
+        if state not in ('completed','blocked'):
+            raise ValueError('invalid research state')
+        with self.conn.transaction():
+            row=self.conn.execute("""UPDATE ci_contact_research_tasks SET state=%s
+                      WHERE id=%s AND state='pending' RETURNING id""",(state,task_id)).fetchone()
+            if not row:
+                raise KeyError(task_id)
+
+    def add_contact(self,company_id,contact:dict)->str:
+        url=canonical_job_url(contact['profile_url'])
+        source=canonical_job_url(contact['source'])
+        with self.conn.transaction():
+            row=self.conn.execute("""INSERT INTO ci_contacts
+                 (company_id,name,current_title,profile_url,profile_source_url)
+                 VALUES (%s,%s,%s,%s,%s)
+                 ON CONFLICT(company_id,profile_url) DO UPDATE SET
+                   current_title=excluded.current_title RETURNING id""",
+                 (company_id,contact['name'],contact['title'],url,source)).fetchone()
+            return str(row['id'])

@@ -49,5 +49,7 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_postgres_catalog.py -v
       - name: Verify source registry migration and board metadata
         run: python -m pytest services/worker/tests/integration/test_postgres_sources.py -v
+      - name: Verify versioned private knowledge ingestion
+        run: python -m pytest services/worker/tests/integration/test_postgres_knowledge.py -v
       - name: Exercise six-role LangGraph routing and checkpoints
         run: python -m pytest services/worker/tests/integration/test_langgraph_runtime.py -v

@@ -55,3 +55,20 @@ def test_postgres_batch_rejects_stale_or_unpublished_jobs():
         catalog.assess_job(job,status='verified_eligible',source_url='https://stale.example/jobs/'+token,
                            excerpt='Remote applicants residing in Nigeria are eligible',confidence=0.9)
         assert all(row['job_id'] != job for row in catalog.create_batch(owner,date.today()))
+
+
+def test_verified_jobs_queue_one_company_research_even_when_reverified():
+    from career.persistence.postgres_catalog import PostgresCareerCatalog
+    token=uuid4().hex[:10]
+    with PostgresCareerCatalog(os.environ['PG_TEST_DSN']) as catalog:
+        job=catalog.upsert_job(source='greenhouse',source_job_id='research-'+token,
+            company_name='Research Firm '+token,company_domain='research-'+token+'.example',
+            title='Engineering Manager',apply_url='https://jobs.example.com/research/'+token,
+            published_at=datetime.now(timezone.utc))
+        for _ in range(2):
+            catalog.assess_job(job,status='verified_eligible',
+              source_url='https://jobs.example.com/research/'+token,
+              excerpt='Remote applicants residing in Nigeria are eligible',confidence=0.9)
+        row=catalog.conn.execute('''SELECT count(*) as n FROM ci_contact_research_tasks
+            WHERE company_id=(SELECT company_id FROM ci_jobs WHERE id=%s) AND workflow_id IS NULL''',(job,)).fetchone()
+        assert row['n']==1

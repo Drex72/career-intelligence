@@ -37,6 +37,9 @@ jobs:
       - name: Discover and research eligible opportunities
         if: steps.gate.outputs.enabled == 'true'
         run: python -m career.cli pg-discover --terms 'backend engineer,software engineer' --board-limit 10 --eligibility-limit 30
+      - name: Research public employees for verified eligible companies
+        if: steps.gate.outputs.enabled == 'true'
+        run: python -m career.cli pg-research-people --limit 10
       - name: Generate lifetime-deduplicated daily batch
         if: steps.gate.outputs.enabled == 'true'
         run: python -m career.cli pg-generate-batch --owner-uuid "$CAREER_OWNER_UUID" --target 100

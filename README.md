@@ -65,7 +65,7 @@ The system can generate individual drafts and has a Gmail API dispatcher adapter
 | Outreach and Gmail adapters | Partial | OAuth onboarding, production delivery, and reconciliation missing |
 | Conversation and employer learning | Partial | Authenticated message ingestion adapter; no scheduled live sync |
 | LangGraph graph contract | Draft implementation | Optional dependency not installed or runtime tested |
-| PostgreSQL migrations and ledger | Draft implementation | No integration environment, RLS only statically checked |
+| PostgreSQL migrations and ledger | Draft implementation | Migrated to Groundwork, with PostgreSQL CI gates |
 | Private remote deployment and Supabase auth | No | Requires dedicated infrastructure provisioning |
 
 ## Test and safety gates
@@ -76,7 +76,7 @@ python -m compileall -q services/worker/src
 bash -n scripts/*.sh
 ```
 
-PostgreSQL integration test is intentionally skipped unless `PG_TEST_DSN` points to an isolated testing database. The migrations have not been applied to a real Supabase instance; never point tests at an unrelated production project.
+PostgreSQL integration test is intentionally skipped unless `PG_TEST_DSN` points to an isolated testing database. The migrations 0001–0008 have been applied to the authorized Groundwork Supabase project; never point tests at an unrelated production project.
 
 ## GitHub publishing
 
@@ -98,3 +98,14 @@ See `docs/superpowers/plans/` for the approved feature plans and `docs/DEPLOYMEN
 ## GitHub source and safety
 
 The application repository at https://github.com/Drex72/career-intelligence is **public**. Draft PR #1 contains the testable local foundation, not a production deployment. Never commit a filled `.env`, OAuth access tokens, imported emails, personal contacts, or private Obsidian knowledge. Store approved personal notes in a separately access-controlled private repository. Production database, remote authentication, and LangGraph checkpointing still require integration tests before deployment.
+
+## Postgres-first implementation (ongoing)
+
+The existing SQLite UI remains a local development tool. PostgreSQL worker
+commands now include `pg-add-board`, `pg-discover`, `pg-research-eligibility`,
+`pg-research-people`, `pg-generate-batch`, `pg-vault-sync`, and `pg-serve`.
+The shared Groundwork database uses 40 isolated `ci_` tables and migration
+`0008_discovery_config`. Migration `0009_people_research_safety` adds company
+research deduplication and function search-path hardening. All automatic
+email sending and paid lookups remain disabled. The full Next.js product UI,
+private Obsidian Git synchronization, and Gmail OAuth are still outstanding.

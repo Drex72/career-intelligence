@@ -14,3 +14,5 @@ def test_cli_exposes_postgres_operations_without_credentials():
     assert 'pg-add-board' in p.stdout
     assert 'pg-research-eligibility' in p.stdout
     assert 'pg-serve' in p.stdout
+    assert 'pg-research-people' in p.stdout
+    assert 'pg-vault-sync' in p.stdout

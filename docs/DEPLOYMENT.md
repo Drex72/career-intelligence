@@ -85,3 +85,36 @@ The scheduler only reads public job sources, records jobs and eligibility, and
 materializes batches. It never sends emails, applies to jobs, or enables paid
 providers. `pg-discover` can also be invoked manually with `DATABASE_URL` set.
 Do not expose database credentials to the browser or a public dashboard.
+
+## PostgreSQL owner-only API
+
+For production, configure all values in the **server** environment, never in
+`NEXT_PUBLIC_*` variables:
+
+- `DATABASE_URL`: restricted PostgreSQL connection string for the Groundwork project
+- `CAREER_OWNER_UUID`: user's Supabase Auth UUID; unrelated Groundwork users are denied
+- `SUPABASE_URL`: `https://manqpbwiwmzqxgldhbdt.supabase.co`
+- `SUPABASE_PUBLISHABLE_KEY`: project publishable key for the `/auth/v1/user` verification call
+
+Run `python -m career.cli pg-serve --host 127.0.0.1 --port 8000` locally.
+The private endpoints are `GET /api/ci/metrics` and
+`GET /api/ci/batches/YYYY-MM-DD`, with `Authorization: Bearer <Supabase access token>`.
+Do not expose the server publicly without HTTPS, ingress controls, and a
+completed security review. This is an API foundation, not the final Next.js UI.
+
+### Personal knowledge
+
+Keep the Obsidian vault outside this public repository. Run
+`python -m career.cli pg-vault-sync /path/to/approved/vault --revision <git-sha>`
+from a trusted machine with the server-side database URL. Until a private Git
+integration is configured, use `--revision local` for explicitly unsynced notes.
+Never sync a partial vault directory as the full root; missing approved files
+are tombstoned by design. The `07-private/` folder and unapproved notes are
+excluded from the agent retrieval index.
+
+### Employee research
+
+`pg-research-people` processes queued companies after verified eligibility.
+It only reads safe company-hosted `/team` pages and parses structured Person
+entries. No addresses are guessed, no private profiles are scraped, and no
+messages are sent.

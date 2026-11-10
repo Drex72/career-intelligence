@@ -33,9 +33,11 @@ def build_parser():
     x=sub.add_parser('export-simplify',help='Export compatible application CSV');x.add_argument('file')
     sub.add_parser('metrics',help='Print metrics JSON')
     x=sub.add_parser('pg-serve',help='Serve authenticated owner-only PostgreSQL API'); x.add_argument('--host',default='127.0.0.1'); x.add_argument('--port',type=int,default=8000)
+    x=sub.add_parser('pg-vault-sync',help='Index approved local Obsidian vault into ci_ PostgreSQL knowledge'); x.add_argument('directory'); x.add_argument('--revision',default='local')
     x=sub.add_parser('pg-add-board',help='Register ATS board in ci_ PostgreSQL source registry'); x.add_argument('provider',choices=('greenhouse','lever','ashby')); x.add_argument('slug'); x.add_argument('name'); x.add_argument('--domain')
     x=sub.add_parser('pg-discover',help='Ingest permitted public feeds into ci_ PostgreSQL tables'); x.add_argument('--terms',default='backend engineer,software engineer'); x.add_argument('--board-limit',type=int,default=10); x.add_argument('--eligibility-limit',type=int,default=30)
     x=sub.add_parser('pg-research-eligibility',help='Verify pending role eligibility from official job pages'); x.add_argument('--limit',type=int,default=30)
+    x=sub.add_parser('pg-research-people',help='Research public employees at verified eligible companies'); x.add_argument('--limit',type=int,default=10)
     x=sub.add_parser('pg-generate-batch',help='Generate strict lifetime-deduplicated PostgreSQL batch'); x.add_argument('--owner-uuid',default=os.environ.get('CAREER_OWNER_UUID')); x.add_argument('--day',default=date.today().isoformat()); x.add_argument('--target',type=int,default=100)
     return p
 
@@ -81,25 +83,32 @@ def run(argv=None):
         from career.persistence.pg_discovery import register_board
         from career.persistence.pg_pipeline import run_pg_discovery
         from career.persistence.pg_eligibility import run_pg_eligibility
+        from career.persistence.pg_people import run_pg_people
+        from career.persistence.pg_knowledge import sync_vault
         dsn=os.environ.get('DATABASE_URL','')
         if not dsn:
             raise SystemExit('DATABASE_URL is required for PostgreSQL operations')
         with PostgresCareerCatalog(dsn) as catalog:
-            if args.command=='pg-add-board':
+            if args.command=='pg-vault-sync':
+                result={'indexed':sync_vault(catalog,Path(args.directory),git_sha=args.revision)}
+            elif args.command=='pg-add-board':
                 result={'registered':register_board(catalog,args.provider,args.slug,args.name,args.domain)}
             elif args.command=='pg-generate-batch':
                 if not args.owner_uuid:
                     raise SystemExit('CAREER_OWNER_UUID or --owner-uuid required')
                 result={'items':catalog.create_batch(UUID(args.owner_uuid),date.fromisoformat(args.day),args.target)}
-            elif args.command in ('pg-discover','pg-research-eligibility'):
+            elif args.command in ('pg-discover','pg-research-eligibility','pg-research-people'):
                 async def gather():
                     async with httpx.AsyncClient(headers={'User-Agent':'PersonalCareerResearch/0.5'},
                                                  follow_redirects=False) as client:
                         discovery = (await run_pg_discovery(catalog,client,args.terms.split(','),
                                        board_limit=args.board_limit)) if args.command=='pg-discover' else None
-                        eligibility=await run_pg_eligibility(catalog,client,limit=(
-                            args.eligibility_limit if args.command=='pg-discover' else args.limit))
-                        return {'discovery':discovery,'eligibility':eligibility}
+                        eligibility=(await run_pg_eligibility(catalog,client,limit=(
+                            args.eligibility_limit if args.command=='pg-discover' else args.limit))) \
+                            if args.command!='pg-research-people' else None
+                        people=await run_pg_people(catalog,client,limit=(
+                            args.limit if args.command=='pg-research-people' else 10))
+                        return {'discovery':discovery,'eligibility':eligibility,'people':people}
                 result=asyncio.run(gather())
             else:raise AssertionError(args.command)
         print(json.dumps(result,default=str,indent=2));return
