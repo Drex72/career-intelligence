@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeHimalayas,safeHimalayasCursor} from './himalayas.mjs';
+import {normalizeHimalayas,safeHimalayasCursor,isSoftwareRole} from './himalayas.mjs';
 import {candidateBoards} from './candidates.mjs';
 const stamp=Date.parse('2026-11-10T12:00:00Z');
 test('preserves Himalayas original application link and official source',()=>{
@@ -55,4 +55,20 @@ test('opaque cursor tokens are bounded and loop-safe',()=>{
  assert.equal(safeHimalayasCursor('x'.repeat(513),seen),null);
  assert.equal(safeHimalayasCursor(null,seen),null);
  assert.equal(safeHimalayasCursor({malicious:true},seen),null);
+});
+
+test('software-focused role filter rejects sales engineering and general analysts',()=>{
+  for(const title of [
+    'Open Source Investigator/Digital Research Analyst',
+    'Energy Solutions Expert / Senior Sales Engineer',
+    'Life Sciences Research Expert (Python)',
+    'Senior Sales Engineer',
+    'Cyber Security Analyst'
+  ]) assert.equal(isSoftwareRole(title),false,title);
+  for(const title of [
+    'Senior Systems Software Engineer - HPC and AI Storage',
+    'Backend Engineer','Platform Engineer','AI Developer',
+    'ML Engineer (MSc. or PhD)','Senior React Full-stack Developer',
+    'Data Warehouse Developer','Java Software Engineer','Mid-Level Developer (Pooling)'
+  ]) assert.equal(isSoftwareRole(title),true,title);
 });
