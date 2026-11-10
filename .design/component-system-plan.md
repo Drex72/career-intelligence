@@ -1,7 +1,7 @@
 # Career Intelligence — UI component architecture and evidence-driven visualization plan
 
 Date: 2026-11-10
-Status: proposed; implementation choices pending verification
+Status: implementation underway; primary components integrated and GitHub CI verified
 Target: `apps/web` Next.js 16, React 19; plain CSS; **no Tailwind, Radix, Recharts or TanStack dependencies currently installed**.
 
 ## Research / reference components
@@ -70,3 +70,22 @@ Because the project currently only has Next.js, React, and Supabase runtime depe
 ## Verification
 
 This is a **design analysis and component selection plan**, not proof that the libraries are installed, integrated or browser-tested. Existing implementation remains functional until incremental component migrations are built and verified.
+
+## Implementation ledger — November 10, 2026
+
+- **Installed with reproducible lockfile:** `@radix-ui/themes`, `@tanstack/react-table`, and `recharts`. GitHub Actions generated and committed `apps/web/package-lock.json`; the temporary lockfile sync workflow was removed afterward.
+- **Theme provider:** `apps/web/src/app/layout.tsx` now wraps the app in Radix `Theme` and includes its library stylesheet.
+- **Opportunities:** `OpportunityDataTable.tsx` uses TanStack Table for sorting and 15-per-page pagination; `OpportunityEvidenceDialog.tsx` uses Radix Dialog with source evidence, assessment details, and safe links; Radix Segmented Control filters the list.
+- **Applications:** `AnalyticsCharts.tsx` uses Recharts for current-stage counts based on real `applications` statuses, with exact count labels and an empty state.
+- **Operations:** `WorkflowStateChart` displays actual `operations.states` counts; run states use Radix Badges; source rejection requires Radix AlertDialog confirmation.
+- **People:** directory profile cards use Radix Card and Avatar.
+- **Outreach:** full message preview uses Radix Dialog; it is read-only and does not send an email.
+- **Shared UI:** `WorkspaceUI` uses Radix Card and Callout primitives.
+
+### Deferred deliberately
+- AICSS is **not** installed. No structured agent thinking/tool-event stream is exposed by the current API, so adding AICSS thinking-state cards would create misleading UI.
+- No invented career-trajectory history graph, conversion-rate funnel, employer sponsorship score, worker uptime chart, or fake engagement metrics.
+- A full shadcn/Tailwind migration is not needed because the chosen Radix Themes foundation works with the existing plain CSS app.
+
+### QA
+The GitHub workflow covers `npm ci`, `npm test`, `tsc --noEmit`, and `next build`. Browser-level keyboard, responsive screenshot, zoom, and screen-reader verification remain release gates.
