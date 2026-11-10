@@ -295,3 +295,31 @@ input:focus,select:focus,textarea:focus{border-color:#6a9bd0;box-shadow:0 0 0 3p
 .workspace-surface>.toolbar label input,.workspace-surface>.toolbar label select{margin-left:4px;max-width:100%}
 @media(max-width:1100px){.contact-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.contact-grid{grid-template-columns:1fr}}
+
+
+/* Public authentication experience */
+.login-screen{padding:24px;background:#f5f7fa}
+.login-layout{width:min(100%,1020px);min-height:610px;display:grid;grid-template-columns:1.05fr .95fr;border:1px solid #dce5ec;border-radius:19px;overflow:hidden;background:#fff;box-shadow:0 28px 85px rgba(29,55,78,.09)}
+.login-story{display:flex;flex-direction:column;justify-content:space-between;padding:40px 44px;background:#183b59;color:#fff;position:relative}
+.login-story:after{content:"";position:absolute;width:280px;height:280px;right:-120px;bottom:40px;border:1px solid #ffffff20;border-radius:50%;pointer-events:none}
+.story-wordmark{display:flex;align-items:center;gap:12px;font-size:15px;font-weight:700;letter-spacing:-.02em}
+.story-mark{height:36px;width:36px;border:1px solid #ffffff50;border-radius:10px;display:grid;place-items:center;font-size:12px;letter-spacing:-.06em}
+.story-main{position:relative;z-index:1;max-width:390px;padding:50px 0}
+.story-label{font-size:10px;letter-spacing:.15em;font-weight:750;color:#a5cce9;margin-bottom:20px}
+.story-main h2{font-size:clamp(35px,3.5vw,49px);line-height:1.13;letter-spacing:-.045em;max-width:10ch;font-weight:720}
+.story-main>p:last-child{font-size:14px;line-height:1.8;color:#c8d9e7;margin-top:24px;max-width:38ch}
+.story-footer{display:flex;align-items:center;gap:10px;font-size:11px;color:#b2cce0}
+.story-footer-dot{height:7px;width:7px;background:#81d4b0;border-radius:50%}
+.login-layout .login-card{border:0;border-radius:0;box-shadow:none;display:flex;justify-content:center;flex-direction:column;max-width:none;padding:45px clamp(28px,5vw,65px)}
+.login-layout .login-card h1{font-size:30px}
+.login-layout .logo-large{display:none}
+.login-layout .login-card .eyebrow{display:block;color:#6886a2;font-size:10px;letter-spacing:.12em}
+.login-layout .login-card small{margin-top:3px}
+@media(max-width:800px){
+ .login-layout{grid-template-columns:1fr;max-width:490px;min-height:0}
+ .login-story{padding:23px 29px;min-height:150px}
+ .story-main{padding:18px 0 0}
+ .story-main h2{font-size:25px;max-width:initial}
+ .story-main>p:last-child,.story-label,.story-footer{display:none}
+ .login-layout .login-card{padding:30px}
+}
