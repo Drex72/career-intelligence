@@ -47,3 +47,8 @@ test('ATS source operations require owner POST, while review queue is read-only'
   assert.deepEqual(route('https://localhost/api/ci/eligibility-queue','GET'),{type:'read',path:'eligibility-queue'});
   assert.equal(route('https://localhost/api/ci/sources/scan','GET'),null);
 });
+
+test('official ATS review can only be initiated by POST',()=>{
+ assert.deepEqual(route('https://localhost/api/ci/eligibility/review','POST'),{type:'reviewEligibility'});
+ assert.equal(route('https://localhost/api/ci/eligibility/review','GET'),null);
+});
