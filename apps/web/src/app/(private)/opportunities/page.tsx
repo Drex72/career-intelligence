@@ -7,7 +7,7 @@ import {ResourceTable,StateNotice,Status} from '@/components/ResourceTable';
 import {PageHeading,SectionHeading,Notice} from '@/components/WorkspaceUI';
 import {safeDateLabel} from '@/lib/data.mjs';
 import {filterOpportunities} from '@/lib/opportunity-filters.mjs';
-type Job={id:string;company_name:string;title:string;published_at:string|null;eligibility:string|null;match_score:number;apply_url:string;source?:string};
+type Job={id:string;company_name:string;title:string;published_at:string|null;eligibility:string|null;eligibility_expired?:boolean;eligibility_reason?:string|null;match_score:number;apply_url:string;source?:string;source_url?:string|null};
 type Source={source_name:string;source_url:string;retrieved_at:string};
 type Evidence={source_url:string;source_kind:string;excerpt:string;observed_at:string;claim:string};
 type Assessment={status:string;confidence:number;assessed_at:string;reasons:unknown;contradictions:unknown};
@@ -79,9 +79,12 @@ export default function Opportunities(){
       <StateNotice loading={loading} error={error} retry={reload}/>
       {!loading&&!error&&<ResourceTable rowKey={r=>r.id} ariaLabel="Matching opportunities" items={filtered} columns={[
         {key:'employer',label:'Employer & role',render:r=><div className="job-identity"><span className="company-avatar" aria-hidden="true">{r.company_name.charAt(0).toUpperCase()}</span><div><strong>{r.title}</strong><span>{r.company_name}</span></div></div>},
-        {key:'status',label:'Hiring eligibility',render:r=><Status value={r.eligibility}/>},
+        {key:'status',label:'Hiring eligibility',render:r=><span title={r.eligibility_reason||undefined}><Status value={r.eligibility}/>{r.eligibility_expired&&<span className="muted"> · Expired</span>}</span>},
         {key:'score',label:'Match',render:r=><span className="score-value">{Number.isFinite(r.match_score)&&r.match_score>0?Math.round(r.match_score)+'%':'Not scored'}</span>},
-        {key:'source',label:'Source',render:r=><span className="muted">{r.source==='remotive'?'Remotive':(r.source||'Unspecified')}</span>},
+        {key:'source',label:'Source',render:r=>{
+          const label=r.source==='remotive'?'Remotive':r.source==='himalayas'?'Himalayas':(r.source||'Unspecified');
+          return r.source_url?.startsWith('https://')?<a href={r.source_url} target="_blank" rel="noopener noreferrer" className="table-action">{label}</a>:<span className="muted">{label}</span>;
+        }},
         {key:'date',label:'Posted',render:r=><span className="muted">{safeDateLabel(r.published_at)}</span>},
         {key:'actions',label:'Actions',render:r=><div className="table-inline-actions"><button type="button" className="table-action" aria-expanded={selected===r.id} aria-controls={selected===r.id?"opportunity-evidence":undefined} onClick={event=>void inspect(r.id,event.currentTarget)}>{selected===r.id?'Hide evidence':'Evidence'}</button>{r.apply_url?.startsWith("https://")?<a href={r.apply_url} target="_blank" rel="noopener noreferrer" className="table-action" aria-label={'View listing for '+r.title+' at '+r.company_name}>Listing ↗</a>:<span className="muted">No link</span>}</div>},
       ]} empty={search||filter!=='all'?'No positions match these filters. Try a different search or eligibility filter.':'No public jobs have been imported yet. Use Check public jobs to retrieve recent listings.'}/>}
