@@ -9,6 +9,7 @@ import {candidateBoards} from './candidates.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription,postingLocation} from './eligibility.mjs';
 import {classifyWorkFacts} from './work-facts.mjs';
 import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
+import {safePreview} from './telemetry.mjs';
 import {normalizeHimalayas,safeHimalayasCursor,isSoftwareRole} from './himalayas.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
@@ -74,8 +75,21 @@ Deno.serve(async (request:Request)=>{
   if(!authorized)return response(401,{error:'Invalid or replayed signed request'});
 
   let runID:string|undefined;
+  let eventCount=0;
+  // Append immutable, sanitized transformation breadcrumbs while work is running.
+  // Telemetry must not block discovery or turn failed trace writes into fake job failures.
+  async function recordStage(stage:string,agent:string,eventType:string,input:Record<string,unknown>,
+    output:Record<string,unknown>,jobId?:string){
+    if(!runID||eventCount>=120)return;
+    eventCount++;
+    const payload:any={worker_run_id:runID,stage,agent,event_type:eventType,
+      input_preview:safePreview(input),output_preview:safePreview(output)};
+    if(jobId&&/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(jobId))payload.job_id=jobId;
+    const saved=await db.from('ci_pipeline_events').insert(payload);
+    if(saved.error)report.telemetry_failures++;
+  }
   const report={remotive:0,himalayas:0,ats_jobs:0,boards_scanned:0,reviewed:0,verified_eligible:0,likely_eligible:0,unknown:0,ineligible:0,candidates:0,matched:0,
-    attempts:0,failures:0};
+    attempts:0,failures:0,telemetry_failures:0};
   try{
     const run=checked(await db.from('ci_worker_runs')
       .insert({state:'running'}).select('id').single());
@@ -107,6 +121,9 @@ Deno.serve(async (request:Request)=>{
             }
           }
         }
+        await recordStage('sources','remotive_feed','feed_normalized',
+          {provider:'remotive',format:'remote_feed'},
+          {accepted:report.remotive,format:'normalized_job'});
       }catch{report.failures++;}
     }
     // Himalayas API refreshes once daily. Respect its shared unauthenticated
@@ -146,6 +163,9 @@ Deno.serve(async (request:Request)=>{
           if(!next)break;
           seenCursors.add(next);
           cursor=next;
+          await recordStage('sources','himalayas_feed','feed_normalized',
+            {provider:'himalayas',format:'remote_feed'},
+            {accepted:report.himalayas,format:'normalized_job'});
         }catch{report.failures++;break;}
       }
     }
@@ -163,6 +183,9 @@ Deno.serve(async (request:Request)=>{
       const claimed=await db.rpc('ci_claim_ats_slot',{p_source_id:board.id});
       if(claimed.error||!claimed.data)continue;
       report.attempts++;
+      await recordStage('registry','ats_source_gate','board_claimed',
+        {provider:cfg.provider,board:cfg.slug,format:'approved_board'},
+        {approved:true,format:'provider_api'});
       try{
         const result=await fetchJSON(boardEndpoint(cfg.provider,cfg.slug));
         cached.set(board.name,result);
@@ -175,8 +198,16 @@ Deno.serve(async (request:Request)=>{
             p_title:candidate.title,p_url:candidate.url,
             p_published_at:candidate.publishedAt,p_remote_text:candidate.remoteText
           });
-          if(!saved.error&&saved.data)report.ats_jobs++;
-          else report.failures++;
+          if(!saved.error&&saved.data){
+            report.ats_jobs++;
+            await recordStage('ingestion','ats_normalizer','posting_saved',
+              {provider:candidate.provider,board:candidate.board,
+               source_job_id:candidate.sourceJobId,format:'provider_posting'},
+              {company:candidate.company,title:candidate.title,location:candidate.remoteText,
+               job_id:typeof saved.data==='string'?saved.data:'',
+               saved:true,format:'canonical_job'},
+              typeof saved.data==='string'?saved.data:undefined);
+          }else report.failures++;
         }
       }catch{report.failures++;}
     }
@@ -222,6 +253,9 @@ Deno.serve(async (request:Request)=>{
         if(wrote.error||!wrote.data){report.failures++;}
         else{
           report.reviewed++;
+          await recordStage('eligibility','official_eligibility_reviewer','assessment_saved',
+            {provider:chosen.provider,board:chosen.slug,job_id:item.job_id,format:'official_posting'},
+            {status:d.status,reason:d.reason,confidence:d.confidence,format:'eligibility_assessment'},item.job_id);
           if(d.status==='verified_eligible')report.verified_eligible++;
           else if(d.status==='likely_eligible')report.likely_eligible++;
           else if(d.status==='ineligible')report.ineligible++;
@@ -275,7 +309,12 @@ Deno.serve(async (request:Request)=>{
             p_matched:result.matched,p_gaps:result.gaps
           });
           if(completed.error)report.failures++;
-          else if(completed.data)report.matched++;
+          else if(completed.data){
+            report.matched++;
+            await recordStage('matching','approved_knowledge_matcher','match_recorded',
+              {job_id:job.id,knowledge_revision:revision,format:'approved_knowledge'},
+              {score:result.score,matched:result.matched.length,format:'job_match'},job.id);
+          }
         }
       }
     }
