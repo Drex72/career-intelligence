@@ -6,7 +6,7 @@ import {createClient} from 'npm:@supabase/supabase-js@2.119.0';
 import {validEnvelope,MAX_BODY_BYTES,MAX_ATS_JOBS_PER_BOARD,MAX_REVIEWS_PER_RUN,selectDueSources} from './policy.mjs';
 import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
 import {candidateBoards} from './candidates.mjs';
-import {classifyOfficialPosting,findOfficialJob,postingDescription} from './eligibility.mjs';
+import {classifyOfficialPosting,findOfficialJob,postingDescription,postingLocation} from './eligibility.mjs';
 import {classifyWorkFacts} from './work-facts.mjs';
 import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
 import {normalizeHimalayas,safeHimalayasCursor,isSoftwareRole} from './himalayas.mjs';
@@ -74,7 +74,7 @@ Deno.serve(async (request:Request)=>{
   if(!authorized)return response(401,{error:'Invalid or replayed signed request'});
 
   let runID:string|undefined;
-  const report={remotive:0,himalayas:0,ats_jobs:0,reviewed:0,candidates:0,matched:0,
+  const report={remotive:0,himalayas:0,ats_jobs:0,boards_scanned:0,reviewed:0,verified_eligible:0,likely_eligible:0,unknown:0,ineligible:0,candidates:0,matched:0,
     attempts:0,failures:0};
   try{
     const run=checked(await db.from('ci_worker_runs')
@@ -166,6 +166,7 @@ Deno.serve(async (request:Request)=>{
       try{
         const result=await fetchJSON(boardEndpoint(cfg.provider,cfg.slug));
         cached.set(board.name,result);
+        report.boards_scanned++;
         const candidates=normalizeBoard(result,cfg.provider,cfg.slug,cfg.company_name);
         for(const candidate of candidates.slice(0,MAX_ATS_JOBS_PER_BOARD)){
           const saved=await db.rpc('ci_ingest_ats_job',{
@@ -212,7 +213,7 @@ Deno.serve(async (request:Request)=>{
         const payload=cached.get(chosen.key)??await fetchJSON(boardEndpoint(chosen.provider,chosen.slug));
         const official=findOfficialJob(payload,chosen.provider,chosen.id);
         if(!official)continue;
-        const d=classifyOfficialPosting(postingDescription(official,chosen.provider));
+        const d=classifyOfficialPosting(postingDescription(official,chosen.provider),postingLocation(official,chosen.provider));
         const wrote=await db.rpc('ci_record_ats_review',{
           p_job_id:item.job_id,p_source_url:chosen.sourceURL,
           p_status:d.status,p_confidence:d.confidence,
@@ -221,6 +222,10 @@ Deno.serve(async (request:Request)=>{
         if(wrote.error||!wrote.data){report.failures++;}
         else{
           report.reviewed++;
+          if(d.status==='verified_eligible')report.verified_eligible++;
+          else if(d.status==='likely_eligible')report.likely_eligible++;
+          else if(d.status==='ineligible')report.ineligible++;
+          else report.unknown++;
           const facts=classifyWorkFacts(d.excerpt);
           if(d.excerpt&&(facts.workMode!=='unknown'||facts.sponsorship!=='unknown')){
             const savedFacts=await db.rpc('ci_record_ats_work_facts',{

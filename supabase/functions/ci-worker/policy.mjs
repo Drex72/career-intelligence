@@ -1,8 +1,8 @@
 /** Strict request and execution budgets for the unsigned-JWT, HMAC-gated worker. */
 export const MAX_BODY_BYTES=1500;
-export const MAX_BOARDS_PER_RUN=2;
-export const MAX_REVIEWS_PER_RUN=2;
-export const MAX_ATS_JOBS_PER_BOARD=20;
+export const MAX_BOARDS_PER_RUN=6;
+export const MAX_REVIEWS_PER_RUN=8;
+export const MAX_ATS_JOBS_PER_BOARD=40;
 export function validEnvelope(payload){
   return !!payload &&
     typeof payload.nonce==='string' &&

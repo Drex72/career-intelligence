@@ -23,6 +23,15 @@ export function postingDescription(posting,provider) {
     provider==='ashby'?(posting.descriptionPlain||posting.descriptionHtml):'';
   return plainPosting(raw);
 }
+/** Official structured job-location fields, never extracted from free-form marketing copy. */
+export function postingLocation(posting,provider) {
+  if(!posting)return '';
+  const value=provider==='greenhouse'?posting.location?.name:
+    provider==='lever'?posting.categories?.location:
+    provider==='ashby'?(posting.location||posting.address?.postalAddress?.addressCountry):'';
+  return typeof value==='string'?value.slice(0,300).trim():'';
+}
+const nigeriaLocation=/^(?:nigeria|[^\n]{1,100},\s*nigeria)(?:\s*\((?:remote|hybrid|onsite|on-site)\))?$/i;
 const negative=[
   /\b(?:cannot|can't|can not|do not|don't|unable to|will not|won't)\s+(?:currently\s+)?(?:hire|employ|recruit)\s+(?:applicants|people|candidates|workers)?\s*(?:in|from|based in)\s+nigeria\b/i,
   /\bnigeria\s+(?:is\s+)?(?:not eligible|ineligible|excluded|not a supported|not an eligible)\b/i,
@@ -34,14 +43,18 @@ const positive=[
   /\bnigeria\s+is\s+an?\s+(?:eligible|supported)\s+(?:hiring\s+)?(?:country|location)\b/i,
   /\b(?:eligible|supported)\s+(?:hiring\s+)?(?:countries|locations)\s*[:\-]\s*[^.!?]{0,70}\bnigeria\b/i,
 ];
-export function classifyOfficialPosting(raw) {
+export function classifyOfficialPosting(raw,officialLocation='') {
   const text=plainPosting(raw);
   if(!text)return {status:'unknown',confidence:0,reason:'No official description text',excerpt:''};
-  const excerpt=text.slice(0,2000);
+  const location=String(officialLocation||'').slice(0,300).trim();
+  const excerpt=(location?'Official job location: '+location+'; ':'')+text.slice(0,1800);
   if(negative.some(x=>x.test(text)))
     return {status:'ineligible',confidence:0.98,reason:'Official posting explicitly excludes hiring in Nigeria',excerpt};
   if(positive.some(x=>x.test(text)))
     return {status:'verified_eligible',confidence:0.9,reason:'Official job posting explicitly permits Nigeria-based candidates',excerpt};
+  if(nigeriaLocation.test(location))
+    return {status:'verified_eligible',confidence:0.9,
+      reason:'Official job location explicitly includes Nigeria',excerpt};
   if(/\b(?:worldwide|anywhere in the world|global remote)\b/i.test(text))
     return {status:'likely_eligible',confidence:0.45,reason:'Worldwide wording requires separate Nigeria hiring verification',excerpt};
   return {status:'unknown',confidence:0,reason:'Official posting does not establish Nigeria hiring eligibility',excerpt};

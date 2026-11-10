@@ -16,7 +16,7 @@ test('ATS scans are strictly bounded and skip recently fetched providers',()=>{
  }));
  const ls=[{action:'ats:ats:lever:company-0',last_run_at:new Date(now-1000).toISOString()}];
  const result=selectDueSources(src,ls,now);
- assert.equal(result.length,MAX_BOARDS_PER_RUN);
+ assert.equal(result.length,Math.min(MAX_BOARDS_PER_RUN,src.length-1));
  assert(result.every(x=>x.config.slug!=='company-0'));
 });
 test('malformed source identifiers cannot be turned into network destinations',()=>{
