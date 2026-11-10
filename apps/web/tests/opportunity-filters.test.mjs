@@ -36,3 +36,10 @@ test('missing optional text cannot crash search or create a positive status',()=
  assert.deepEqual(filterOpportunities([item],'','unverified'),[item]);
  assert.deepEqual(filterOpportunities([item],'query','all'),[]);
 });
+
+test('expired positive assessment stays outside current eligible groups',()=>{
+ const expired={id:'expired',company_name:'Old',title:'Role',eligibility:'verified_eligible',eligibility_expired:true};
+ assert.equal(eligibilityGroup('verified_eligible',true),'unverified');
+ assert.deepEqual(filterOpportunities([expired],'','verified_eligible'),[]);
+ assert.deepEqual(filterOpportunities([expired],'','unverified'),[expired]);
+});
