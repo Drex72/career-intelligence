@@ -40,6 +40,9 @@ jobs:
       - name: Research public employees for verified eligible companies
         if: steps.gate.outputs.enabled == 'true'
         run: python -m career.cli pg-research-people --limit 10
+      - name: Rank eligible roles from approved knowledge
+        if: steps.gate.outputs.enabled == 'true'
+        run: python -m career.cli pg-rank --limit 100
       - name: Generate lifetime-deduplicated daily batch
         if: steps.gate.outputs.enabled == 'true'
         run: python -m career.cli pg-generate-batch --owner-uuid "$CAREER_OWNER_UUID" --target 100

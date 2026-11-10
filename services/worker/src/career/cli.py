@@ -38,6 +38,7 @@ def build_parser():
     x=sub.add_parser('pg-discover',help='Ingest permitted public feeds into ci_ PostgreSQL tables'); x.add_argument('--terms',default='backend engineer,software engineer'); x.add_argument('--board-limit',type=int,default=10); x.add_argument('--eligibility-limit',type=int,default=30)
     x=sub.add_parser('pg-research-eligibility',help='Verify pending role eligibility from official job pages'); x.add_argument('--limit',type=int,default=30)
     x=sub.add_parser('pg-research-people',help='Research public employees at verified eligible companies'); x.add_argument('--limit',type=int,default=10)
+    x=sub.add_parser('pg-rank',help='Rank verified jobs against approved Obsidian knowledge'); x.add_argument('--limit',type=int,default=100)
     x=sub.add_parser('pg-generate-batch',help='Generate strict lifetime-deduplicated PostgreSQL batch'); x.add_argument('--owner-uuid',default=os.environ.get('CAREER_OWNER_UUID')); x.add_argument('--day',default=date.today().isoformat()); x.add_argument('--target',type=int,default=100)
     return p
 
@@ -85,12 +86,15 @@ def run(argv=None):
         from career.persistence.pg_eligibility import run_pg_eligibility
         from career.persistence.pg_people import run_pg_people
         from career.persistence.pg_knowledge import sync_vault
+        from career.persistence.pg_matching import rank_verified_jobs
         dsn=os.environ.get('DATABASE_URL','')
         if not dsn:
             raise SystemExit('DATABASE_URL is required for PostgreSQL operations')
         with PostgresCareerCatalog(dsn) as catalog:
             if args.command=='pg-vault-sync':
                 result={'indexed':sync_vault(catalog,Path(args.directory),git_sha=args.revision)}
+            elif args.command=='pg-rank':
+                result=rank_verified_jobs(catalog,limit=args.limit)
             elif args.command=='pg-add-board':
                 result={'registered':register_board(catalog,args.provider,args.slug,args.name,args.domain)}
             elif args.command=='pg-generate-batch':
