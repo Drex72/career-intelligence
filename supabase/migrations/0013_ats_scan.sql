@@ -1,5 +1,15 @@
 -- Fixed-host ATS board ingestion. Only server-side service_role can call these routines.
 -- Does not mark a role eligible for Nigeria and does not send messages.
+create table if not exists ci_eligibility_review_queue (
+  job_id uuid primary key references ci_jobs(id) on delete cascade,
+  state text not null default 'pending' check (state in ('pending','reviewed','blocked')),
+  first_queued_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now()
+);
+alter table ci_eligibility_review_queue enable row level security;
+revoke all on ci_eligibility_review_queue from anon, authenticated;
+grant select,insert,update,delete on ci_eligibility_review_queue to service_role;
+
 create or replace function ci_claim_ats_slot(p_source_id uuid)
 returns boolean language plpgsql security invoker set search_path=public as $$
 declare source_name text; claimed text;
@@ -36,10 +46,10 @@ begin
   end if;
   source_url_ok := case p_provider
     when 'greenhouse' then
-      p_url like 'https://boards.greenhouse.io/'||p_board||'/%'
-      or p_url like 'https://job-boards.greenhouse.io/'||p_board||'/%'
-    when 'lever' then p_url like 'https://jobs.lever.co/'||p_board||'/%'
-    when 'ashby' then p_url like 'https://jobs.ashbyhq.com/'||p_board||'/%'
+      left(p_url,length('https://boards.greenhouse.io/'||p_board||'/'))='https://boards.greenhouse.io/'||p_board||'/'
+      or left(p_url,length('https://job-boards.greenhouse.io/'||p_board||'/'))='https://job-boards.greenhouse.io/'||p_board||'/'
+    when 'lever' then left(p_url,length('https://jobs.lever.co/'||p_board||'/'))='https://jobs.lever.co/'||p_board||'/'
+    when 'ashby' then left(p_url,length('https://jobs.ashbyhq.com/'||p_board||'/'))='https://jobs.ashbyhq.com/'||p_board||'/'
     else false end;
   if not source_url_ok or p_url~'[?#]' then return null; end if;
   select id into company_id from ci_companies where canonical_domain is null
@@ -66,9 +76,14 @@ begin
   values(job_id,p_provider,p_source_job_id,p_url)
   on conflict(source_name,source_job_id) where source_job_id is not null
   do update set retrieved_at=now(),source_url=excluded.source_url;
+  insert into ci_eligibility_review_queue(job_id)
+    select job_id where not exists (
+      select 1 from ci_eligibility_assessments e where e.job_id=job_id
+    )
+    on conflict(job_id) do update set last_seen_at=now();
   return job_id;
 end;
-$$;
+$;
 revoke all on function ci_ingest_ats_job(text,text,text,text,text,text,timestamptz,text)
   from public, anon, authenticated;
 grant execute on function ci_ingest_ats_job(text,text,text,text,text,text,timestamptz,text)
