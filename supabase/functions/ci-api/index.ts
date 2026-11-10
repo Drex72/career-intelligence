@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.119.0';
 import {route,isUuid,validApplication,validDraft,validReply,classifyReply,roleRestricted} from './policy.mjs';
 import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription} from './eligibility.mjs';
+import {candidateBoards} from './candidates.mjs';
 
 const baseHeaders = {'content-type':'application/json; charset=utf-8','cache-control':'no-store, max-age=0','x-content-type-options':'nosniff'};
 const reply=(status:number,payload:unknown)=>new Response(JSON.stringify(payload),{status,headers:baseHeaders});
@@ -35,6 +36,12 @@ Deno.serve(async (request:Request)=>{
   try{
     if(operation.type==='read'){
       const path=operation.path;
+      if(path==='source-candidates'){
+        const suggestions=list(check(await db.from('ci_ats_source_candidates')
+          .select('id,provider,board_slug,company_name,evidence_url,source_kind,state,discovered_at')
+          .eq('state','pending').order('discovered_at',{ascending:false}).limit(100)));
+        return reply(200,{candidates:suggestions});
+      }
       if(path==='sources'){
         const sources=list(check(await db.from('ci_discovery_sources')
           .select('id,name,kind,state,config,first_discovered_at')
@@ -151,7 +158,7 @@ Deno.serve(async (request:Request)=>{
         data=await response.json();
       }catch{return reply(502,{error:'Job source temporarily unavailable'});}
       if(!Array.isArray(data?.jobs))return reply(502,{error:'Unexpected job source format'});
-      let imported=0,skipped=0;
+      let imported=0,skipped=0,candidates=0;
       const now=Date.now();
       for(const job of data.jobs.slice(0,100)){
         const title=String(job?.title||'').trim();
@@ -173,13 +180,34 @@ Deno.serve(async (request:Request)=>{
           p_url:src.origin+src.pathname,p_published_at:date.toISOString(),
           p_location:String(job?.candidate_required_location||'').slice(0,500),
         });
-        if(ingested.error||!ingested.data)skipped++;else imported++;
+        if(ingested.error||!ingested.data){skipped++;continue;}
+        imported++;
+        if(candidates<10){
+          for(const possible of candidateBoards(job?.description,company,src.origin+src.pathname)){
+            if(candidates>=10)break;
+            const proposed=await db.rpc('ci_suggest_ats_board',{
+              p_provider:possible.provider,p_board_slug:possible.slug,
+              p_company_name:possible.company,p_evidence_url:possible.evidenceURL
+            });
+            if(!proposed.error&&proposed.data)candidates++;
+          }
+        }
       }
-      return reply(200,{source:'Remotive',imported,skipped,checked:Math.min(data.jobs.length,100),
+      return reply(200,{source:'Remotive',imported,skipped,candidates,checked:Math.min(data.jobs.length,100),
         note:'These are public listings only. Hiring eligibility has not been verified.'});
     }
     let body:any;
     try{body=await request.json();}catch{return reply(400,{error:'Invalid JSON body'});}
+    if(operation.type==='decideCandidate'){
+      if(!body||!isUuid(body.candidate_id)||!['approved','rejected'].includes(body.decision))
+        return reply(422,{error:'Candidate UUID and valid decision required'});
+      const reviewed=check(await db.rpc('ci_decide_ats_candidate',{
+        p_candidate_id:body.candidate_id,p_decision:body.decision
+      }));
+      if(!reviewed)return reply(409,{error:'Candidate cannot be reviewed, was already handled, or source limit reached'});
+      return reply(200,{decision:body.decision,
+        note:'Only approved ATS candidates become scannable sources; hiring eligibility remains unverified.'});
+    }
     if(operation.type==='registerSource'){
       if(!validBoard(body))return reply(422,{error:'Valid ATS provider, board slug and company name required'});
       const company=body.company.trim();
