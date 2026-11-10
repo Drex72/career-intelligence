@@ -82,7 +82,7 @@ export default function Operations(){
     <section className="metric-grid">{Object.entries(tasks.data?.states||{}).map(([state,count])=><div className="metric" key={state}>
       <span>{state.replace(/_/g,' ')}</span><strong>{count}</strong></div>)}</section>
     {tasks.data&&Object.keys(tasks.data.states).length===0&&<div className="empty-state">No PostgreSQL workflow tasks have been created yet.</div>}
-    <section className="workspace-surface">
+    <div className="operations-overview-grid"><section className="workspace-surface">
       <div className="section-title"><div><h2>Daily recommendations</h2>
         <p className="muted">Automatic batch assembly is scheduled for 07:00 Lagos time. Only verified-eligible jobs with source evidence can be delivered.</p>
       </div></div>
@@ -99,6 +99,7 @@ export default function Operations(){
       </div>)}
       {tasks.data?.workerRuns?.length===0&&<p className="muted">No scheduled worker runs recorded yet.</p>}
     </section>
+    </div>
     <section className="workspace-surface">
       <div className="section-title"><div><h2>Public ATS boards</h2>
         <p className="muted">Register Greenhouse, Lever or Ashby public boards. No private scraping, paid services or emails.</p></div></div>
