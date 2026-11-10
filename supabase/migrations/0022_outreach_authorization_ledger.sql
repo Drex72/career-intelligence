@@ -92,8 +92,6 @@ begin
     where id=p_draft and owner_user_id=p_owner and status='approved' for update;
   if not found then return null; end if;
   v_key:='ci:gmail:v1:'||p_owner::text||':'||p_draft::text;
-  select id into v_id from ci_outbound_messages where intent_key=v_key;
-  if v_id is not null then return v_id; end if;
   if not ci_outreach_draft_ready(p_owner,p_draft) then return null; end if;
   select * into v_approval from ci_outreach_approvals
     where owner_user_id=p_owner and draft_id=p_draft and revoked_at is null
@@ -101,6 +99,8 @@ begin
   if not found then return null; end if;
   select * into v_policy from ci_outreach_policies where owner_user_id=p_owner;
   if v_approval.mode='standing' and not coalesce(v_policy.auto_enabled,false) then return null; end if;
+  select id into v_id from ci_outbound_messages where intent_key=v_key;
+  if v_id is not null then return v_id; end if;
   v_daily:=least(coalesce(v_policy.daily_limit,10),20);
   v_company_daily:=least(coalesce(v_policy.per_company_daily_limit,1),2);
   if v_daily<1 or v_company_daily<1 then return null; end if;
