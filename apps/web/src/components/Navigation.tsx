@@ -6,6 +6,7 @@ const links=[
   ['/', 'Overview','▦'],['/opportunities','Opportunities','◎'],
   ['/applications','Applications','▣'],['/people','People intelligence','♧'],
   ['/knowledge','Knowledge base','◇'],['/outreach','Outreach','✉'],
+  ['/conversations','Conversations','☷'],
   ['/operations','Agent operations','◷'],
 ];
 export function Navigation(){

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const simpleRead = new Set(['metrics','jobs','people','applications','knowledge','outreach','operations']);
+const simpleRead = new Set(['metrics','jobs','people','applications','knowledge','outreach','conversations','operations']);
 const dailyBatch = /^batches\/\d{4}-\d{2}-\d{2}$/;
 
 function safePath(parts: string[], method: string): string | null {
   const path=parts.join('/');
   if (method==='GET' && (simpleRead.has(path) || dailyBatch.test(path))) return path;
-  if (method==='POST' && path==='applications') return path;
+  if (method==='POST' && ['applications','outreach/drafts','conversations'].includes(path)) return path;
   return null;
 }
 
