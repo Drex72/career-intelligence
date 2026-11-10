@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import {useState} from 'react';
+import {useRef,useState} from 'react';
 import { getSupabase } from '@/lib/supabase';
 
 type IconName='overview'|'opportunities'|'applications'|'people'|'knowledge'|'outreach'|'conversations'|'operations';
@@ -31,14 +31,15 @@ function NavIcon({name}:{name:IconName}){
 export function Navigation(){
   const pathname=usePathname();const router=useRouter();
   const [mobileOpen,setMobileOpen]=useState(false);
+  const menuButton=useRef<HTMLButtonElement>(null);
   async function signOut(){await getSupabase().auth.signOut();router.replace('/login');}
   return <aside className="sidebar">
     <Link href="/" className="brand" aria-label="Career Intelligence home"><span className="brand-mark">C<span>I</span></span>
       <span>Career <strong>Intelligence</strong><small>Personal workspace</small></span></Link>
-    <button type="button" className="mobile-menu-trigger" aria-expanded={mobileOpen} aria-controls="mobile-workspace-nav" onClick={()=>setMobileOpen(open=>!open)}>
+    <button type="button" ref={menuButton} className="mobile-menu-trigger" aria-expanded={mobileOpen} aria-controls={mobileOpen?"mobile-workspace-nav":undefined} onClick={()=>setMobileOpen(open=>!open)}>
       <span>{mobileOpen?'Close menu':'Browse workspace'}</span><span aria-hidden="true">{mobileOpen?'×':'☰'}</span>
     </button>
-    {mobileOpen&&<nav id="mobile-workspace-nav" className="mobile-workspace-nav" aria-label="Mobile workspace navigation">
+    {mobileOpen&&<nav id="mobile-workspace-nav" className="mobile-workspace-nav" aria-label="Mobile workspace navigation" onKeyDown={event=>{if(event.key==="Escape"){setMobileOpen(false);menuButton.current?.focus();}}}>
       {links.map(({href,label,icon})=>{
         const active=href==='/'?pathname===href:pathname===href||pathname.startsWith(href+'/');
         return <Link key={href} href={href} aria-current={active?'page':undefined} className={'mobile-nav-link '+(active?'active':'')} onClick={()=>setMobileOpen(false)}>
