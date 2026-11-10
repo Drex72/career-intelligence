@@ -79,6 +79,16 @@ def run(argv=None):
         import uvicorn
         uvicorn.run(app,host=args.host,port=args.port)
         return
+    if args.command=='pg-vault-sync' and args.dry_run:
+        # Validate approved note syntax and paths without accessing the database.
+        # The actual sync below still requires DATABASE_URL and a working connection.
+        from career.knowledge.vault import scan_approved_vault
+        approved, skipped = scan_approved_vault(Path(args.directory))
+        print(json.dumps({
+            'dry_run': True, 'approved': len(approved), 'skipped': skipped,
+            'database_modified': False,
+        }, indent=2))
+        return
     if args.command.startswith('pg-'):
         from career.persistence.postgres_catalog import PostgresCareerCatalog
         from career.persistence.pg_discovery import register_board
