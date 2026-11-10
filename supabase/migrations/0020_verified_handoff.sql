@@ -159,3 +159,47 @@ revoke all on function ci_record_verified_match(uuid,text,integer,jsonb,jsonb)
  from public,anon,authenticated;
 grant execute on function ci_record_verified_match(uuid,text,integer,jsonb,jsonb)
  to service_role;
+
+-- Reconcile stuck awaiting_approval tasks after a private vault sync. Bounded.
+create or replace function ci_refresh_verified_handoffs(p_limit integer default 20)
+returns integer language plpgsql security invoker set search_path=public as $ci_refresh_handoff$
+declare item record; touched integer:=0;
+begin
+ if p_limit is null or p_limit not between 1 and 100 then return 0; end if;
+ for item in select distinct j.id from ci_jobs j
+   join ci_workflow_tasks t on t.idempotency_key='ci:matching:'||j.id::text
+   where j.status='open' and t.state in ('awaiting_approval','blocked','cancelled')
+   order by j.id limit p_limit
+ loop
+   if ci_queue_verified_job_handoffs(item.id) then touched:=touched+1; end if;
+ end loop;
+ return touched;
+end;
+$ci_refresh_handoff$;
+revoke all on function ci_refresh_verified_handoffs(integer) from public,anon,authenticated;
+grant execute on function ci_refresh_verified_handoffs(integer) to service_role;
+
+-- When the approved Obsidian knowledge changes, completed matches become
+-- pending for a new revision, never silently retaining a stale score.
+create or replace function ci_requeue_matches_on_knowledge_change()
+returns trigger language plpgsql security invoker set search_path=public as $ci_new_knowledge$
+begin
+  update ci_workflow_tasks set state='pending',output_ref=null,updated_at=now()
+  where task_type='matching' and state='completed'
+    and exists (
+      select 1 from ci_jobs j
+      join lateral (
+        select a.status,a.expires_at from ci_eligibility_assessments a
+          where a.job_id=j.id order by a.assessed_at desc,a.id desc limit 1
+      ) a on true
+      where 'job:'||j.id::text=ci_workflow_tasks.input_ref
+        and j.status='open' and a.status='verified_eligible'
+        and (a.expires_at is null or a.expires_at>now())
+    );
+  return new;
+end;
+$ci_new_knowledge$;
+drop trigger if exists ci_matching_refresh_on_knowledge_version on ci_knowledge_versions;
+create trigger ci_matching_refresh_on_knowledge_version
+  after insert on ci_knowledge_versions for each row
+  execute function ci_requeue_matches_on_knowledge_change();
