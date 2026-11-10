@@ -61,3 +61,9 @@ test('revocation is POST-only and never creates an email send route',()=>{
   assert.equal(safePath(['outreach','revoke'],'GET'),null);
   assert.equal(safePath(['outreach','send'],'POST'),null);
 });
+
+test('owner preferences allow GET and POST, but no unauthenticated send action',()=>{
+  assert.equal(safePath(['preferences'],'GET'),'preferences');
+  assert.equal(safePath(['preferences'],'POST'),'preferences');
+  assert.equal(safePath(['preferences','admin'],'POST'),null);
+});
