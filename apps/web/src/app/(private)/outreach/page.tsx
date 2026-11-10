@@ -5,6 +5,7 @@ import { useResource } from '@/components/useResource';
 import { useCareerSession } from '@/components/AuthGate';
 import { ResourceTable,StateNotice,Status } from '@/components/ResourceTable';
 import { ciFetch } from '@/lib/api';
+import { availableOutreachActions } from '@/lib/outreach-controls.mjs';
 
 type Job={id:string,title:string,company_name:string,company_id:string,eligibility:string};
 type Contact={id:string,name:string,company_id:string};
@@ -78,9 +79,9 @@ export default function Outreach(){
         {key:'approval',label:'Approval',render:r=><span className="muted">{approvalFor(r.id)?'Manually approved':'Not approved'}</span>},
         {key:'actions',label:'Review and control',render:r=><div className="table-inline-actions">
           <button type="button" className="table-action" aria-expanded={expanded===r.id} onClick={()=>setExpanded(expanded===r.id?null:r.id)}>{expanded===r.id?'Hide message':'Read full draft'}</button>
-          {r.status==='draft'&&!approvalFor(r.id)&&<button type="button" className="table-action" disabled={actionBusy} onClick={()=>setPending({draftId:r.id,action:'approve'})}>Approve manually</button>}
-          {r.status==='approved'&&approvalFor(r.id)&&!intentFor(r.id)&&<button type="button" className="table-action" disabled={actionBusy} onClick={()=>setPending({draftId:r.id,action:'queue'})}>Queue intent</button>}
-          {(approvalFor(r.id)||intentFor(r.id)?.status==='pending')&&<button type="button" className="table-action" disabled={actionBusy} onClick={()=>setPending({draftId:r.id,action:'revoke'})}>Revoke</button>}
+          {availableOutreachActions(r,approvalFor(r.id),intentFor(r.id)).approve&&<button type="button" className="table-action" disabled={actionBusy} onClick={()=>setPending({draftId:r.id,action:'approve'})}>Approve manually</button>}
+          {availableOutreachActions(r,approvalFor(r.id),intentFor(r.id)).queue&&<button type="button" className="table-action" disabled={actionBusy} onClick={()=>setPending({draftId:r.id,action:'queue'})}>Queue intent</button>}
+          {availableOutreachActions(r,approvalFor(r.id),intentFor(r.id)).revoke&&<button type="button" className="table-action" disabled={actionBusy} onClick={()=>setPending({draftId:r.id,action:'revoke'})}>Revoke</button>}
         </div>},
       ]} empty="No outreach drafts yet. Drafts require verified-eligible roles and sourced contacts."/>}
       {expanded&&drafts.data?.drafts.some(d=>d.id===expanded)&&<div className="guidance-surface" aria-label="Full outreach draft">
