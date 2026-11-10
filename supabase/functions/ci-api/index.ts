@@ -60,6 +60,15 @@ Deno.serve(async (request:Request)=>{
           apply_url:x.ci_jobs?.apply_url||null
         }))});
       }
+      if(path==='preferences'){
+        const prefs=check(await db.from('ci_discovery_preferences')
+          .select('daily_target,job_families,seniority_levels,work_modes,sponsorship,updated_at')
+          .eq('owner_user_id',owner).maybeSingle());
+        return reply(200,{preferences:prefs||{
+          daily_target:25,job_families:['any'],seniority_levels:['any'],
+          work_modes:['any'],sponsorship:'any',updated_at:null
+        },note:'Unknown work mode or visa support is never counted as a verified match.'});
+      }
       if(path==='metrics'){
         const [companies,jobs,delivered,applications]=await Promise.all([
           db.from('ci_companies').select('id',{head:true,count:'exact'}),
@@ -202,14 +211,39 @@ Deno.serve(async (request:Request)=>{
       return reply(200,{job,assessments:list(check(assessments)),evidence:list(check(evidence)),sources:list(check(sources)),
         note:'Eligibility is only verified when current, authoritative employer evidence supports the specific role. A remote label is not proof of Nigeria eligibility.'});
     }
+    if(operation.type==='savePreferences'){
+      const families=['any','backend','frontend','fullstack','platform','ai_ml','security','data'];
+      const levels=['any','intern','junior','mid','senior','staff'];
+      const modes=['any','remote','hybrid','onsite'];
+      const validArray=(items:unknown,allowed:string[],max:number)=>
+        Array.isArray(items)&&items.length>0&&items.length<=max&&
+        items.every((x:any)=>typeof x==='string'&&allowed.includes(x))&&
+        new Set(items).size===items.length&&
+        (!items.includes('any')||items.length===1);
+      if(!body||!Number.isInteger(body.daily_target)||body.daily_target<1||body.daily_target>100||
+        !validArray(body.job_families,families,7)||
+        !validArray(body.seniority_levels,levels,5)||
+        !validArray(body.work_modes,modes,4)||
+        !['any','confirmed_required'].includes(body.sponsorship))
+        return reply(422,{error:'Invalid discovery preferences'});
+      const saved=check(await db.rpc('ci_save_discovery_preferences',{
+        p_owner:owner,p_target:body.daily_target,p_families:body.job_families,
+        p_levels:body.seniority_levels,p_modes:body.work_modes,
+        p_sponsorship:body.sponsorship
+      }));
+      if(!saved)return reply(409,{error:'Preferences could not be saved'});
+      return reply(200,{saved:true,note:'Future recommendation batches use these limits. Previously delivered items are never silently changed.'});
+    }
     if(operation.type==='generateBatch'){
       const localDate = new Intl.DateTimeFormat('sv-SE',{
         timeZone:'Africa/Lagos',year:'numeric',month:'2-digit',day:'2-digit'
       }).format(new Date());
+      const preferences=check(await db.from('ci_discovery_preferences')
+        .select('daily_target').eq('owner_user_id',owner).maybeSingle());
       const generated=check(await db.rpc('ci_generate_daily_batch',{
-        p_owner_user_id:owner,p_local_date:localDate,p_target:100
+        p_owner_user_id:owner,p_local_date:localDate,p_target:preferences?.daily_target??25
       }));
-      return reply(200,{day:localDate,inserted:generated,
+      return reply(200,{day:localDate,inserted:generated,target:preferences?.daily_target??25,
         note:'Only previously unseen employers with evidence-backed verified eligible open roles are delivered.'});
     }
     if(operation.type==='discover'){
