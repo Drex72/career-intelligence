@@ -221,7 +221,8 @@ Deno.serve(async (request:Request)=>{
           active_ats_boards:boards.count??0,
           pending_source_candidates:candidates.count??0,
         };
-        return reply(200,{states:counts,delivery,workerRuns,readiness});
+        const integrity=check(await db.rpc('ci_pipeline_integrity_report',{p_owner:owner}));
+        return reply(200,{states:counts,delivery,workerRuns,readiness,integrity});
       }
     }
     if(operation.type==='batch'){
