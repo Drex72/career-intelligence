@@ -82,7 +82,7 @@ class PostgresCareerCatalog:
 
     def upsert_job(self, *, source: str, source_job_id: str | None, company_name: str,
                    company_domain: str | None, title: str, apply_url: str,
-                   published_at: datetime | None = None) -> str:
+                   published_at: datetime | None = None, remote_text: str | None = None) -> str:
         if not source.strip() or not title.strip() or not company_name.strip():
             raise ValueError('source, company, and title required')
         domain = normalize_domain(company_domain)
@@ -99,19 +99,29 @@ class PostgresCareerCatalog:
             company = self._upsert_company(source, company_name, domain)
             result = self.conn.execute('''INSERT INTO ci_jobs
                 (company_id,title,apply_url,canonical_apply_url,status,published_at,
-                 last_verified_at,timestamp_source,timestamp_confidence)
-                VALUES (%s,%s,%s,%s,'open',%s,now(),%s,%s)
+                 last_verified_at,timestamp_source,timestamp_confidence,remote_text)
+                VALUES (%s,%s,%s,%s,'open',%s,now(),%s,%s,%s)
                 ON CONFLICT(company_id,canonical_apply_url) DO UPDATE SET
-                    last_verified_at=now(),status='open',title=excluded.title
+                    last_verified_at=now(),status='open',title=excluded.title,
+                    remote_text=excluded.remote_text
                 RETURNING id''', (company,title,apply_url,url,published_at,
                                   'source_publication' if published_at else 'unknown',
-                                  'authoritative' if published_at else 'unknown')).fetchone()
+                                  'authoritative' if published_at else 'unknown',remote_text)).fetchone()
             job_id = result['id']
             if source_job_id:
                 self.conn.execute('''INSERT INTO ci_job_sources(job_id,source_name,source_job_id,source_url)
-                    VALUES (%s,%s,%s,%s) ON CONFLICT(source_name,source_job_id) DO NOTHING''',
+                    VALUES (%s,%s,%s,%s) ON CONFLICT DO NOTHING''',
                     (job_id, source, source_job_id, apply_url))
             return str(job_id)
+
+    def pending_eligibility(self, limit: int = 30) -> list[dict]:
+        if not 1 <= limit <= 100:
+            raise ValueError('eligibility limit must be 1..100')
+        rows = self.conn.execute("""SELECT j.id,j.apply_url,j.title,j.remote_text
+            FROM ci_jobs j WHERE j.status='open' AND NOT EXISTS
+            (SELECT 1 FROM ci_eligibility_assessments e WHERE e.job_id=j.id)
+            ORDER BY j.published_at DESC NULLS LAST,j.first_seen_at DESC LIMIT %s""",(limit,)).fetchall()
+        return [dict(row) for row in rows]
 
     def assess_job(self, job_id: str, *, status: str, source_url: str | None,
                    excerpt: str, confidence: float, policy_version: str = '0.5') -> None:
@@ -163,13 +173,15 @@ class PostgresCareerCatalog:
                    LEFT JOIN LATERAL (SELECT score FROM ci_job_matches m
                        WHERE m.job_id=j.id ORDER BY computed_at DESC LIMIT 1) m ON TRUE
                    WHERE j.status='open' AND a.status='verified_eligible'
+                     AND j.published_at>=now()-interval '7 days'
                      AND (a.expires_at IS NULL OR a.expires_at>now())
                      AND EXISTS (SELECT 1 FROM ci_eligibility_evidence ev WHERE ev.job_id=j.id)
                      AND NOT EXISTS (SELECT 1 FROM ci_delivered_companies dc
                                      WHERE dc.owner_user_id=%s AND dc.company_id=j.company_id)
                      AND NOT EXISTS (SELECT 1 FROM ci_delivered_jobs dj
                                      WHERE dj.owner_user_id=%s AND dj.job_id=j.id)
-                   ORDER BY score DESC,j.published_at DESC NULLS LAST,j.first_seen_at DESC
+                   ORDER BY (j.published_at>=now()-interval '72 hours') DESC,
+                            score DESC,j.published_at DESC NULLS LAST,j.first_seen_at DESC
                    LIMIT %s''', (owner,owner,max(remaining*8,remaining))).fetchall()
                 taken = {x['company_id'] for x in existing}
                 rank = len(existing)

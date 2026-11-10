@@ -41,3 +41,17 @@ def test_postgres_catalog_rejects_unsupported_verified_assessments():
         with pytest.raises(ValueError,match='confidence'):
             catalog.assess_job(job,status='unknown',source_url=None,excerpt='',confidence=1.2)
         assert catalog.create_batch(uuid4(),date.today())==[]
+
+
+def test_postgres_batch_rejects_stale_or_unpublished_jobs():
+    from career.persistence.postgres_catalog import PostgresCareerCatalog
+    owner=uuid4()
+    with PostgresCareerCatalog(os.environ['PG_TEST_DSN']) as catalog:
+        token=uuid4().hex[:10]
+        job=catalog.upsert_job(source='greenhouse',source_job_id='stale-'+token,
+            company_name='Stale Firm '+token,company_domain='stale-'+token+'.example',
+            title='Backend Engineer',apply_url='https://stale.example/jobs/'+token,
+            published_at=datetime.now(timezone.utc)-timedelta(days=10))
+        catalog.assess_job(job,status='verified_eligible',source_url='https://stale.example/jobs/'+token,
+                           excerpt='Remote applicants residing in Nigeria are eligible',confidence=0.9)
+        assert catalog.create_batch(owner,date.today())==[]

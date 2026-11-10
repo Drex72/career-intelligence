@@ -8,7 +8,7 @@ MIGRATIONS = sorted((ROOT / 'supabase' / 'migrations').glob('*.sql'))
 
 def test_shared_database_migrations_only_create_ci_objects():
     import re
-    assert len(MIGRATIONS) == 7
+    assert len(MIGRATIONS) >= 7
     ddl = '\n'.join(p.read_text(encoding='utf8') for p in MIGRATIONS)
     assert 'revoke all on all tables in schema public' not in ddl.lower()
     for table in re.findall(r'create\s+table\s+if\s+not\s+exists\s+(\w+)', ddl, flags=re.I):

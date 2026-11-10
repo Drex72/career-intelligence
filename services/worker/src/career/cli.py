@@ -9,6 +9,7 @@ import json
 import os
 from datetime import date
 from pathlib import Path
+from uuid import UUID
 import httpx
 from career.platform import CareerPlatform
 from career.pipeline import run_discovery
@@ -31,6 +32,10 @@ def build_parser():
     x=sub.add_parser('import-simplify',help='Import CSV application history');x.add_argument('file')
     x=sub.add_parser('export-simplify',help='Export compatible application CSV');x.add_argument('file')
     sub.add_parser('metrics',help='Print metrics JSON')
+    x=sub.add_parser('pg-add-board',help='Register ATS board in ci_ PostgreSQL source registry'); x.add_argument('provider',choices=('greenhouse','lever','ashby')); x.add_argument('slug'); x.add_argument('name'); x.add_argument('--domain')
+    x=sub.add_parser('pg-discover',help='Ingest permitted public feeds into ci_ PostgreSQL tables'); x.add_argument('--terms',default='backend engineer,software engineer'); x.add_argument('--board-limit',type=int,default=10); x.add_argument('--eligibility-limit',type=int,default=30)
+    x=sub.add_parser('pg-research-eligibility',help='Verify pending role eligibility from official job pages'); x.add_argument('--limit',type=int,default=30)
+    x=sub.add_parser('pg-generate-batch',help='Generate strict lifetime-deduplicated PostgreSQL batch'); x.add_argument('--owner-uuid',default=os.environ.get('CAREER_OWNER_UUID')); x.add_argument('--day',default=date.today().isoformat()); x.add_argument('--target',type=int,default=100)
     return p
 
 
@@ -51,6 +56,33 @@ def run(argv=None):
         import uvicorn
         uvicorn.run(make_app(args.db,token,args.owner),host=args.host,port=args.port)
         return
+    if args.command.startswith('pg-'):
+        from career.persistence.postgres_catalog import PostgresCareerCatalog
+        from career.persistence.pg_discovery import register_board
+        from career.persistence.pg_pipeline import run_pg_discovery
+        from career.persistence.pg_eligibility import run_pg_eligibility
+        dsn=os.environ.get('DATABASE_URL','')
+        if not dsn:
+            raise SystemExit('DATABASE_URL is required for PostgreSQL operations')
+        with PostgresCareerCatalog(dsn) as catalog:
+            if args.command=='pg-add-board':
+                result={'registered':register_board(catalog,args.provider,args.slug,args.name,args.domain)}
+            elif args.command=='pg-generate-batch':
+                if not args.owner_uuid:
+                    raise SystemExit('CAREER_OWNER_UUID or --owner-uuid required')
+                result={'items':catalog.create_batch(UUID(args.owner_uuid),date.fromisoformat(args.day),args.target)}
+            elif args.command in ('pg-discover','pg-research-eligibility'):
+                async def gather():
+                    async with httpx.AsyncClient(headers={'User-Agent':'PersonalCareerResearch/0.5'},
+                                                 follow_redirects=False) as client:
+                        discovery = (await run_pg_discovery(catalog,client,args.terms.split(','),
+                                       board_limit=args.board_limit)) if args.command=='pg-discover' else None
+                        eligibility=await run_pg_eligibility(catalog,client,limit=(
+                            args.eligibility_limit if args.command=='pg-discover' else args.limit))
+                        return {'discovery':discovery,'eligibility':eligibility}
+                result=asyncio.run(gather())
+            else:raise AssertionError(args.command)
+        print(json.dumps(result,default=str,indent=2));return
     with CareerPlatform(args.db) as platform:
         if args.command=='add-board':
             platform.add_board(args.provider,args.slug,args.name,args.domain);result={'saved':True}

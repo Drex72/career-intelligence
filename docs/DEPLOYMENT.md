@@ -65,3 +65,23 @@ objects live in `public` and carry the `ci_` prefix (for example,
   internal tables, **not** the shared Supabase schema.
 
 Never commit the Groundwork connection string, API keys, or Obsidian vault.
+
+## Career Intelligence shared Groundwork database (ci_ namespace)
+
+The `ci_` tables are isolated within Groundwork's existing Supabase project. The
+new `0008_discovery_config.sql` migration adds only a `config` column to
+`ci_discovery_sources` and an index with a `ci_` prefix. Apply it using the
+normal tracked migration flow before enabling scheduled discovery.
+
+The default GitHub Actions scheduled workflow is OFF. To enable it deliberately:
+
+1. Configure Actions secret `CI_DATABASE_URL` with a restricted, server-side
+   PostgreSQL connection string. Never put this secret in source or browser code.
+2. Configure Actions secret `CI_OWNER_UUID` with the authenticated user's UUID.
+3. Set Actions repository variable `CI_AUTO_RUN` to `true` after testing.
+4. Confirm workflows remain within GitHub Actions and Supabase free quotas.
+
+The scheduler only reads public job sources, records jobs and eligibility, and
+materializes batches. It never sends emails, applies to jobs, or enables paid
+providers. `pg-discover` can also be invoked manually with `DATABASE_URL` set.
+Do not expose database credentials to the browser or a public dashboard.
