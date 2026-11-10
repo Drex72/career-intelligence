@@ -22,3 +22,8 @@ test('job evidence route is read-only and requires UUID-shaped ID',()=>{
  assert.equal(safePath(['jobs',id,'evidence'],'POST'),null);
  assert.equal(safePath(['jobs','not-an-id','evidence'],'GET'),null);
 });
+
+test('daily batch generation requires POST',()=>{
+ assert.equal(safePath(['batches','generate'],'POST'),'batches/generate');
+ assert.equal(safePath(['batches','generate'],'GET'),null);
+});

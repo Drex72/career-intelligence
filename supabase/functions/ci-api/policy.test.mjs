@@ -34,3 +34,8 @@ test('evidence access is GET-only and validates job UUID',()=>{
  assert.equal(route(`https://localhost/functions/v1/ci-api/api/ci/jobs/${valid}/evidence`,'POST'),null);
  assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/jobs/invalid/evidence','GET'),null);
 });
+
+test('daily batch generation is a separate owner-only POST route',()=>{
+ assert.deepEqual(route('https://localhost/functions/v1/ci-api/api/ci/batches/generate','POST'),{type:'generateBatch'});
+ assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/batches/generate','GET'),null);
+});

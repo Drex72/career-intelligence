@@ -96,6 +96,16 @@ Deno.serve(async (request:Request)=>{
       return reply(200,{job,assessments:list(check(assessments)),evidence:list(check(evidence)),sources:list(check(sources)),
         note:'Eligibility is only verified when current, authoritative employer evidence supports the specific role. A remote label is not proof of Nigeria eligibility.'});
     }
+    if(operation.type==='generateBatch'){
+      const localDate = new Intl.DateTimeFormat('sv-SE',{
+        timeZone:'Africa/Lagos',year:'numeric',month:'2-digit',day:'2-digit'
+      }).format(new Date());
+      const generated=check(await db.rpc('ci_generate_daily_batch',{
+        p_owner_user_id:owner,p_local_date:localDate,p_target:100
+      }));
+      return reply(200,{day:localDate,inserted:generated,
+        note:'Only previously unseen employers with evidence-backed verified eligible open roles are delivered.'});
+    }
     if(operation.type==='discover'){
       // Remotive's public API asks clients to limit requests to four/day and attribute source.
       // This is an owner-initiated, bounded ingestion. Listings remain unverified.
