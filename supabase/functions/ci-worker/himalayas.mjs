@@ -1,5 +1,13 @@
 /** Himalayas official API normalization. Provider terms require unmodified applicationLink. */
-const positions=/engineer|developer|platform|devops|infrastructure|machine learning|research|software|backend|frontend|security|data scientist/i;
+/** Software/backend/AI engineering intent. Generic "engineer" and "research" are insufficient. */
+export function isSoftwareRole(input) {
+  const title=String(input||'').trim();
+  if(title.length<3||title.length>250)return false;
+  if(/\b(?:sales engineer|sales engineering|sales solutions|business development|digital research analyst|investigator|customer success|life sciences research expert)\b/i.test(title))return false;
+  const engineering=/\b(?:software|backend|back-end|frontend|front-end|full[ -]?stack|web|cloud|platform|infrastructure|devops|site reliability|sre|machine learning|ml|ai|artificial intelligence|systems|data|cybersecurity|security|python|typescript|javascript|java|rust|golang|node(?:\.js)?)\b/i;
+  const role=/\b(?:engineer|developer|architect|programmer|research engineer)\b/i;
+  return /\bdeveloper\b/i.test(title) || (engineering.test(title)&&role.test(title));
+}
 function safeURL(input){
   try{
     const url=new URL(String(input||''));
@@ -20,7 +28,7 @@ export function normalizeHimalayas(payload,now=Date.now()){
     const publishedMs=published*1000;
     const restrictions=Array.isArray(raw?.locationRestrictions)?
       raw.locationRestrictions.map(x=>String(x?.alpha2||x?.name||'')).filter(Boolean).slice(0,30):[];
-    if(!positions.test(title)||title.length<3||title.length>250||
+    if(!isSoftwareRole(title)||
        company.length<2||company.length>180||!source||!application||
        source.hostname!=='himalayas.app'||!/^\/companies\/[A-Za-z0-9_-]+\/jobs\/[A-Za-z0-9_-]+$/.test(source.pathname)||
        source.search||source.hash||!Number.isSafeInteger(published)||!Number.isFinite(publishedMs)||
