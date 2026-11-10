@@ -67,3 +67,13 @@ test('owner preferences allow GET and POST, but no unauthenticated send action',
   assert.equal(safePath(['preferences'],'POST'),'preferences');
   assert.equal(safePath(['preferences','admin'],'POST'),null);
 });
+
+test('factory observability is read-only and restricted to individual UUID-shaped job lineages',()=>{
+ const id='f59015fd-927f-4cee-a023-0d9784e19171';
+ assert.equal(safePath(['flow'],'GET'),'flow');
+ assert.equal(safePath(['flow'],'POST'),null);
+ assert.equal(safePath(['flow','jobs',id],'GET'),'flow/jobs/'+id);
+ assert.equal(safePath(['flow','jobs',id],'POST'),null);
+ assert.equal(safePath(['flow','jobs','not-a-job'],'GET'),null);
+ assert.equal(safePath(['flow','events','all'],'GET'),null);
+});
