@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {useRef,useState} from 'react';
 import { getSupabase } from '@/lib/supabase';
 
-type IconName='overview'|'opportunities'|'applications'|'people'|'knowledge'|'outreach'|'conversations'|'operations';
+type IconName='overview'|'opportunities'|'applications'|'people'|'knowledge'|'outreach'|'conversations'|'operations'|'factory';
 const links:{href:string;label:string;icon:IconName}[]=[
   {href:'/',label:'Overview',icon:'overview'},
   {href:'/opportunities',label:'Opportunities',icon:'opportunities'},
@@ -13,6 +13,7 @@ const links:{href:string;label:string;icon:IconName}[]=[
   {href:'/knowledge',label:'Knowledge base',icon:'knowledge'},
   {href:'/outreach',label:'Outreach',icon:'outreach'},
   {href:'/conversations',label:'Conversations',icon:'conversations'},
+  {href:'/factory',label:'Factory flow',icon:'factory'},
   {href:'/operations',label:'Agent operations',icon:'operations'},
 ];
 const paths:Record<IconName,React.ReactNode>={
@@ -23,6 +24,7 @@ const paths:Record<IconName,React.ReactNode>={
   knowledge:<><path d="M4 5.5C7 4 10 4 12 6c2-2 5-2 8-.5V19c-3-1.5-6-1.5-8 .5-2-2-5-2-8-.5zM12 6v13.5"/></>,
   outreach:<><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></>,
   conversations:<><path d="M20 11.5a8 8 0 0 1-8 8 9 9 0 0 1-4-.9L4 20l1.4-4A8 8 0 1 1 20 11.5Z"/><path d="M8 11h8M8 14h5"/></>,
+  factory:<><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M2 12h20M7 7V3h4v4m4 5v9M7 16h4"/></>,
   operations:<><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6 2.1 2.1m0-12.8-2.1 2.1m-8.6 8.6-2.1 2.1"/><circle cx="12" cy="12" r="4"/></>,
 };
 function NavIcon({name}:{name:IconName}){
