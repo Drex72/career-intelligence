@@ -38,6 +38,124 @@ Deno.serve(async (request:Request)=>{
   try{
     if(operation.type==='read'){
       const path=operation.path;
+
+      if(path==='flow'){
+        // Read-only, owner-gated observability. No secret, note body, or raw employer payload.
+        const [
+          events,jobSources,assessments,matches,tasks,workers,
+          jobs,boards,knowledgeCount,matchCount,evidenceCount,
+          queued,sourceCount,jobCount,contacts,drafts,conversations,batches
+        ]=await Promise.all([
+          db.from('ci_pipeline_events')
+            .select('id,worker_run_id,job_id,stage,agent,event_type,input_preview,output_preview,occurred_at')
+            .order('id',{ascending:false}).limit(100),
+          db.from('ci_job_sources')
+            .select('id,job_id,source_name,source_job_id,retrieved_at')
+            .order('retrieved_at',{ascending:false}).limit(45),
+          db.from('ci_eligibility_assessments')
+            .select('id,job_id,status,confidence,reasons,assessed_at')
+            .order('assessed_at',{ascending:false}).limit(45),
+          db.from('ci_job_matches')
+            .select('id,job_id,score,computed_at')
+            .order('computed_at',{ascending:false}).limit(25),
+          db.from('ci_workflow_tasks')
+            .select('id,task_type,state,input_ref,updated_at')
+            .order('updated_at',{ascending:false}).limit(100),
+          db.from('ci_worker_runs')
+            .select('id,started_at,finished_at,state,details')
+            .order('started_at',{ascending:false}).limit(12),
+          db.from('ci_jobs')
+            .select('id,title,status,published_at,first_seen_at,ci_companies(legal_name)')
+            .order('first_seen_at',{ascending:false}).limit(70),
+          db.from('ci_discovery_sources').select('id',{head:true,count:'exact'})
+            .eq('kind','ats').eq('state','active'),
+          db.from('ci_knowledge_documents').select('id',{head:true,count:'exact'})
+            .eq('status','approved').in('visibility',['matching-safe','agents-safe']),
+          db.from('ci_job_matches').select('id',{head:true,count:'exact'}),
+          db.from('ci_eligibility_evidence').select('id',{head:true,count:'exact'}),
+          db.from('ci_eligibility_review_queue').select('job_id',{head:true,count:'exact'}).eq('state','pending'),
+          db.from('ci_job_sources').select('id',{head:true,count:'exact'}),
+          db.from('ci_jobs').select('id',{head:true,count:'exact'}),
+          db.from('ci_contacts').select('id',{head:true,count:'exact'}),
+          db.from('ci_outreach_drafts').select('id',{head:true,count:'exact'}).eq('owner_user_id',owner),
+          db.from('ci_conversation_events').select('id',{head:true,count:'exact'}).eq('owner_user_id',owner),
+          db.from('ci_daily_batches').select('id,local_date,state,target,generated_at')
+            .eq('owner_user_id',owner).order('local_date',{ascending:false}).limit(1)
+        ]);
+        for(const result of [events,jobSources,assessments,matches,tasks,workers,jobs,
+          boards,knowledgeCount,matchCount,evidenceCount,queued,sourceCount,jobCount,
+          contacts,drafts,conversations,batches]){
+          if(result.error)throw new Error('flow observability read unavailable');
+        }
+        const latest=list(batches.data)[0];
+        let delivered=0;
+        if(latest){
+          const count=await db.from('ci_daily_batch_items').select('id',{head:true,count:'exact'}).eq('batch_id',latest.id);
+          if(count.error)throw new Error('delivery observation unavailable');
+          delivered=count.count??0;
+        }
+        const trueEvents=list(events.data).map((e:any)=>({
+          id:'event:'+e.id,run_id:e.worker_run_id,job_id:e.job_id,
+          stage:e.stage,agent:e.agent,type:e.event_type,
+          input:e.input_preview,output:e.output_preview,
+          time:e.occurred_at,kind:'instrumented'
+        }));
+        // Pre-instrumentation records remain visible, explicitly identified as
+        // provenance snapshots rather than reconstructed live agent executions.
+        const historical=[
+          ...list(jobSources.data).map((s:any)=>({
+            id:'source:'+s.id,job_id:s.job_id,stage:'ingestion',agent:'source_ingest',
+            type:'source_recorded',input:{source:s.source_name,source_job_id:s.source_job_id},
+            output:{job_id:s.job_id,format:'canonical_job'},time:s.retrieved_at,kind:'provenance'
+          })),
+          ...list(assessments.data).map((a:any)=>({
+            id:'assessment:'+a.id,job_id:a.job_id,stage:'eligibility',
+            agent:'official_eligibility_reviewer',type:'assessment_recorded',
+            input:{job_id:a.job_id,format:'official_evidence'},
+            output:{status:a.status,confidence:a.confidence},time:a.assessed_at,kind:'provenance'
+          })),
+          ...list(matches.data).map((m:any)=>({
+            id:'match:'+m.id,job_id:m.job_id,stage:'matching',
+            agent:'approved_knowledge_matcher',type:'match_recorded',
+            input:{job_id:m.job_id,format:'approved_knowledge'},
+            output:{score:m.score},time:m.computed_at,kind:'provenance'
+          }))
+        ];
+        const timelines=[...trueEvents,...historical]
+          .filter((e:any)=>e.time&&Number.isFinite(Date.parse(e.time)))
+          .sort((a:any,b:any)=>Date.parse(b.time)-Date.parse(a.time))
+          .slice(0,160);
+        const stageCounts={
+          sources:boards.count??0,registry:boards.count??0,ingestion:jobCount.count??0,
+          eligibility:assessments.data?.length??0,matching:matchCount.count??0,
+          ranking:null,delivery:delivered,people:contacts.count??0,
+          outreach:drafts.count??0,conversation:conversations.count??0,
+          knowledge:knowledgeCount.count??0
+        };
+        const roleNames=['discovery','eligibility','matching','people','outreach','conversation'];
+        const roleStates=roleNames.map(role=>{
+          const xs=list(tasks.data).filter((t:any)=>t.task_type===role);
+          const active=xs.find((t:any)=>t.state==='running'||t.state==='leased');
+          return {role,total_tasks:xs.length,active:!!active,
+            latest_state:xs[0]?.state||'not_observed',
+            latest_at:xs[0]?.updated_at||null};
+        });
+        return reply(200,{
+          observed_at:new Date().toISOString(),poll_interval_ms:8000,
+          stage_counts:stageCounts,source_records:sourceCount.count??0,
+          evidence_records:evidenceCount.count??0,
+          review_pending:queued.count??0,
+          knowledge_documents:knowledgeCount.count??0,
+          latest_batch:latest?{date:latest.local_date,state:latest.state,target:latest.target,delivered}:null,
+          runs:list(workers.data),roles:roleStates,
+          jobs:list(jobs.data).map((j:any)=>({
+            id:j.id,title:j.title,company:j.ci_companies?.legal_name||'Unknown',
+            status:j.status,published_at:j.published_at,first_seen_at:j.first_seen_at
+          })),
+          events:timelines,
+          note:'Only newly instrumented events represent direct worker stage execution. Historical provenance is labeled separately. Six LangGraph roles may be idle.'
+        });
+      }
       if(path==='source-candidates'){
         const suggestions=list(check(await db.from('ci_ats_source_candidates')
           .select('id,provider,board_slug,company_name,evidence_url,source_kind,state,discovered_at')
@@ -224,6 +342,80 @@ Deno.serve(async (request:Request)=>{
         const integrity=check(await db.rpc('ci_pipeline_integrity_report',{p_owner:owner}));
         return reply(200,{states:counts,delivery,workerRuns,readiness,integrity});
       }
+    }
+
+    if(operation.type==='flowJob'){
+      const job=check(await db.from('ci_jobs')
+        .select('id,title,apply_url,status,published_at,remote_text,first_seen_at,description_hash,ci_companies(legal_name)')
+        .eq('id',operation.jobId).maybeSingle());
+      if(!job)return reply(404,{error:'Job not found'});
+      const [sources,assessments,evidence,matches,delivered,events,tasks]=await Promise.all([
+        db.from('ci_job_sources')
+          .select('source_name,source_job_id,source_url,retrieved_at,raw_hash')
+          .eq('job_id',job.id).order('retrieved_at',{ascending:false}).limit(8),
+        db.from('ci_eligibility_assessments')
+          .select('status,confidence,reasons,contradictions,assessed_at,expires_at')
+          .eq('job_id',job.id).order('assessed_at',{ascending:false}).limit(5),
+        db.from('ci_eligibility_evidence')
+          .select('source_url,source_kind,excerpt,observed_at,scope,claim')
+          .eq('job_id',job.id).order('observed_at',{ascending:false}).limit(5),
+        db.from('ci_job_matches')
+          .select('score,matched,gaps,computed_at,knowledge_revision')
+          .eq('job_id',job.id).order('computed_at',{ascending:false}).limit(3),
+        db.from('ci_delivered_jobs').select('job_id')
+          .eq('job_id',job.id).eq('owner_user_id',owner).limit(1),
+        db.from('ci_pipeline_events')
+          .select('id,stage,agent,event_type,input_preview,output_preview,occurred_at')
+          .eq('job_id',job.id).order('id',{ascending:false}).limit(50),
+        db.from('ci_workflow_tasks')
+          .select('id,task_type,state,created_at,updated_at')
+          .eq('input_ref','job:'+job.id).order('created_at',{ascending:false}).limit(30)
+      ]);
+      for(const q of [sources,assessments,evidence,matches,delivered,events,tasks]){
+        if(q.error)throw new Error('lineage data unavailable');
+      }
+      const latestSource=list(sources.data)[0],assessment=list(assessments.data)[0],
+        proof=list(evidence.data)[0],match=list(matches.data)[0];
+      const snapshots:any[]=[];
+      if(latestSource){
+        snapshots.push({stage:'sources',time:latestSource.retrieved_at,
+          before:{provider:latestSource.source_name,external_id:latestSource.source_job_id,
+            listing_url:latestSource.source_url,raw_payload:'Not retained; source hash available'},
+          after:{source_name:latestSource.source_name,job_id:job.id,
+            source_hash:latestSource.raw_hash||'Not recorded'}});
+      }
+      snapshots.push({stage:'ingestion',time:job.first_seen_at,
+        before:latestSource?{provider:latestSource.source_name,
+          provider_job_id:latestSource.source_job_id}:{source:'Not recorded'},
+        after:{id:job.id,company:job.ci_companies?.legal_name||'Unknown',
+          title:job.title,status:job.status,published_at:job.published_at,
+          location:job.remote_text,description_hash:job.description_hash}});
+      if(assessment){
+        snapshots.push({stage:'eligibility',time:assessment.assessed_at,
+          before:{official_url:proof?.source_url||null,
+            excerpt:typeof proof?.excerpt==='string'?proof.excerpt.slice(0,700):null,
+            evidence_scope:proof?.scope||null},
+          after:{status:assessment.status,confidence:assessment.confidence,
+            reasons:assessment.reasons,expires_at:assessment.expires_at}});
+      }
+      if(match){
+        snapshots.push({stage:'matching',time:match.computed_at,
+          before:{job_id:job.id,knowledge_revision:match.knowledge_revision},
+          after:{score:match.score,matched:match.matched,gaps:match.gaps}});
+      }
+      if(list(delivered.data).length){
+        snapshots.push({stage:'delivery',time:null,before:{job_id:job.id},
+          after:{delivered:true,lifetime_deduplicated:true}});
+      }
+      return reply(200,{
+        job:{id:job.id,title:job.title,company:job.ci_companies?.legal_name||'Unknown',
+          status:job.status,apply_url:job.apply_url},
+        snapshots,events:list(events.data).map((e:any)=>({
+          id:e.id,stage:e.stage,agent:e.agent,type:e.event_type,
+          input:e.input_preview,output:e.output_preview,time:e.occurred_at
+        })),tasks:list(tasks.data),
+        note:'Source payloads are not retained. This view shows persisted, timestamped before/after records; missing stages are not simulated.'
+      });
     }
     if(operation.type==='batch'){
       const bs=list(check(await db.from('ci_daily_batches').select('id').eq('owner_user_id',owner).eq('local_date',operation.day).limit(1)));
