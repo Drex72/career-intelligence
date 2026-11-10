@@ -7,6 +7,7 @@ import {validEnvelope,MAX_BODY_BYTES,MAX_ATS_JOBS_PER_BOARD,MAX_REVIEWS_PER_RUN,
 import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
 import {candidateBoards} from './candidates.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription} from './eligibility.mjs';
+import {classifyWorkFacts} from './work-facts.mjs';
 import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
 import {normalizeHimalayas,safeHimalayasCursor,isSoftwareRole} from './himalayas.mjs';
 
@@ -217,7 +218,18 @@ Deno.serve(async (request:Request)=>{
           p_status:d.status,p_confidence:d.confidence,
           p_excerpt:d.excerpt,p_reason:d.reason
         });
-        if(wrote.error||!wrote.data)report.failures++;else report.reviewed++;
+        if(wrote.error||!wrote.data){report.failures++;}
+        else{
+          report.reviewed++;
+          const facts=classifyWorkFacts(d.excerpt);
+          if(d.excerpt&&(facts.workMode!=='unknown'||facts.sponsorship!=='unknown')){
+            const savedFacts=await db.rpc('ci_record_ats_work_facts',{
+              p_job_id:item.job_id,p_source_url:chosen.sourceURL,p_excerpt:d.excerpt,
+              p_work_mode:facts.workMode,p_sponsorship:facts.sponsorship
+            });
+            if(savedFacts.error||!savedFacts.data)report.failures++;
+          }
+        }
       }catch{report.failures++;}
     }
     // Only approved, matching-safe Obsidian knowledge can unlock matching tasks.
