@@ -1,10 +1,39 @@
 'use client';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabase } from '@/lib/supabase';
 export default function Login(){
   const router=useRouter();const [email,setEmail]=useState('');const [password,setPassword]=useState('');
   const [loading,setLoading]=useState(false);const [error,setError]=useState<string|null>(null);
+  useEffect(()=>{
+    let active=true;
+    const check=async()=>{
+      try {
+        const supabase=getSupabase();
+        const {data}=await supabase.auth.getSession();
+        if (!data.session) return;
+        const response=await fetch('/api/ci/metrics',{
+          headers:{Authorization:'Bearer '+data.session.access_token},cache:'no-store'});
+        if (!active) return;
+        if (response.ok) router.replace('/');
+        else if (response.status===403) setError('This Google account is not authorized for the Career Intelligence workspace.');
+        else if (response.status>=500) setError('The private workspace is temporarily unavailable.');
+      } catch { if(active) setError('Could not verify your current session.'); }
+    };
+    void check();
+    return ()=>{active=false;};
+  },[router]);
+  async function signInGoogle(){
+    setLoading(true);setError(null);
+    try {
+      const supabase=getSupabase();
+      const {error:oauthError}=await supabase.auth.signInWithOAuth({
+        provider:'google',
+        options:{redirectTo:window.location.origin+'/login'},
+      });
+      if(oauthError) throw oauthError;
+    }catch(err){setError(err instanceof Error?err.message:'Unable to start Google sign-in');setLoading(false);}
+  }
   async function submit(event:FormEvent){
     event.preventDefault();setLoading(true);setError(null);
     try {
@@ -28,6 +57,7 @@ export default function Login(){
       {error&&<div className="error-message" role="alert">{error}</div>}
       <button type="submit" disabled={loading}>{loading?'Verifying…':'Sign in'}</button>
     </form>
-    <small className="muted">No public registrations · No automatic email sending</small>
+    <button type="button" className="outline-button" disabled={loading} onClick={signInGoogle}>Continue with Google</button>
+    <small className="muted">Google sign-in uses the same owner-only access checks · No public registrations · No automatic email sending</small>
   </div></main>;
 }
