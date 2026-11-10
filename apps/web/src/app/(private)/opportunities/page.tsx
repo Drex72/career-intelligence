@@ -5,7 +5,7 @@ import { useCareerSession } from '@/components/AuthGate';
 import { ciFetch } from '@/lib/api';
 import { ResourceTable,StateNotice,Status } from '@/components/ResourceTable';
 import { safeDateLabel } from '@/lib/data.mjs';
-type Job={id:string,company_name:string,title:string,published_at:string|null,eligibility:string|null,match_score:number,apply_url:string,source?:string};
+type Job={id:string,company_name:string,title:string,published_at:string|null,eligibility:string|null,match_score:number,apply_url:string,source?:string,source_url?:string|null};
 type Source={source_name:string,source_url:string,retrieved_at:string};
 type Evidence={source_url:string,source_kind:string,excerpt:string,observed_at:string,claim:string};
 type Assessment={status:string,confidence:number,assessed_at:string,reasons:unknown,contradictions:unknown};
@@ -51,7 +51,10 @@ export default function Opportunities(){
         {key:'role',label:'Role',render:r=>r.title},
         {key:'status',label:'Eligibility',render:r=><Status value={r.eligibility}/>},
         {key:'score',label:'Match',render:r=>r.match_score?`${r.match_score}%`:'Not scored'},
-        {key:'source',label:'Source',render:r=>r.source==='remotive'?'Remotive':(r.source||'Unspecified')},
+        {key:'source',label:'Source',render:r=>{
+          const label=r.source==='remotive'?'Remotive':r.source==='himalayas'?'Himalayas':(r.source||'Unspecified');
+          return r.source_url?.startsWith('https://')?<a href={r.source_url} target="_blank" rel="noopener noreferrer" className="text-link">{label}</a>:label;
+        }},
         {key:'evidence',label:'Evidence',render:r=><button type="button" className="text-link" onClick={()=>void inspect(r.id)}>{selected===r.id?'Hide':'View evidence'}</button>},
         {key:'date',label:'Published',render:r=>safeDateLabel(r.published_at)},
         {key:'apply',label:'Listing',render:r=><a className="text-link" target="_blank" rel="noopener noreferrer" href={r.apply_url}>View ↗</a>},

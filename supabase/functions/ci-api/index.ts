@@ -77,13 +77,13 @@ Deno.serve(async (request:Request)=>{
         const [e,m,sources]=await Promise.all([
           db.from('ci_eligibility_assessments').select('job_id,status,assessed_at').in('job_id',ids).order('assessed_at',{ascending:false}).limit(1000),
           db.from('ci_job_matches').select('job_id,score,computed_at').in('job_id',ids).order('computed_at',{ascending:false}).limit(1000),
-          db.from('ci_job_sources').select('job_id,source_name').in('job_id',ids).order('retrieved_at',{ascending:false}).limit(1000),
+          db.from('ci_job_sources').select('job_id,source_name,source_url').in('job_id',ids).order('retrieved_at',{ascending:false}).limit(1000),
         ]);
-        const es=new Map<string,string>(),ms=new Map<string,number>(),ss=new Map<string,string>();
+        const es=new Map<string,string>(),ms=new Map<string,number>(),ss=new Map<string,{name:string,url:string}>();
         for(const item of list(check(e)))if(!es.has(item.job_id))es.set(item.job_id,item.status);
         for(const item of list(check(m)))if(!ms.has(item.job_id))ms.set(item.job_id,item.score);
-        for(const item of list(check(sources)))if(!ss.has(item.job_id))ss.set(item.job_id,item.source_name);
-        return reply(200,{jobs:jobs.map((j:any)=>({id:j.id,title:j.title,apply_url:j.apply_url,status:j.status,published_at:j.published_at,first_seen_at:j.first_seen_at,company_id:j.company_id,company_name:j.ci_companies?.legal_name||'',eligibility:es.get(j.id)||null,match_score:ms.get(j.id)||0,source:ss.get(j.id)||'unknown'}))});
+        for(const item of list(check(sources)))if(!ss.has(item.job_id))ss.set(item.job_id,{name:item.source_name,url:item.source_url});
+        return reply(200,{jobs:jobs.map((j:any)=>({id:j.id,title:j.title,apply_url:j.apply_url,status:j.status,published_at:j.published_at,first_seen_at:j.first_seen_at,company_id:j.company_id,company_name:j.ci_companies?.legal_name||'',eligibility:es.get(j.id)||null,match_score:ms.get(j.id)||0,source:ss.get(j.id)?.name||'unknown',source_url:ss.get(j.id)?.url||null}))});
       }
       if(path==='people'){
         const xs=list(check(await db.from('ci_contacts').select('id,name,current_title,profile_url,company_id,identity_verified,ci_companies(legal_name)').order('created_at',{ascending:false}).limit(100)));

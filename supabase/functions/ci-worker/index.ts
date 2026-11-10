@@ -8,6 +8,7 @@ import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
 import {candidateBoards} from './candidates.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription} from './eligibility.mjs';
 import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
+import {normalizeHimalayas} from './himalayas.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
 const response=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
@@ -72,7 +73,7 @@ Deno.serve(async (request:Request)=>{
   if(!authorized)return response(401,{error:'Invalid or replayed signed request'});
 
   let runID:string|undefined;
-  const report={remotive:0,ats_jobs:0,reviewed:0,candidates:0,matched:0,
+  const report={remotive:0,himalayas:0,ats_jobs:0,reviewed:0,candidates:0,matched:0,
     attempts:0,failures:0};
   try{
     const run=checked(await db.from('ci_worker_runs')
@@ -106,6 +107,28 @@ Deno.serve(async (request:Request)=>{
           }
         }
       }catch{report.failures++;}
+    }
+    // Himalayas API refreshes once daily. Respect its shared unauthenticated
+    // quota and keep official Apply URLs and provider attribution unchanged.
+    const himalayasSlot=checked(await db.rpc('ci_claim_feed_slot',{p_action:'himalayas'}));
+    if(himalayasSlot){
+      for(let offset=0;offset<=40;offset+=20){
+        report.attempts++;
+        try{
+          const page=await fetchJSON('https://himalayas.app/jobs/api?limit=20&offset='+offset);
+          const jobs=normalizeHimalayas(page);
+          for(const job of jobs){
+            const saved=await db.rpc('ci_ingest_himalayas_job',{
+              p_guid:job.guid,p_company:job.company,p_title:job.title,
+              p_application_link:job.applicationLink,p_published_at:job.publishedAt,
+              p_locations:job.locations
+            });
+            if(saved.error||!saved.data)report.failures++;
+            else report.himalayas++;
+          }
+          if(!Array.isArray(page?.jobs)||page.jobs.length<20)break;
+        }catch{report.failures++;break;}
+      }
     }
     const [active,limits]=await Promise.all([
       db.from('ci_discovery_sources').select('id,name,kind,state,config')
