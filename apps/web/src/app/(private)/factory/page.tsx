@@ -1,98 +1,288 @@
 'use client';
+
 import Link from 'next/link';
-import {useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {PageHeading} from '@/components/WorkspaceUI';
 import {StateNotice} from '@/components/ResourceTable';
+import {useCareerSession} from '@/components/AuthGate';
 import {useResource} from '@/components/useResource';
+import {ciFetch} from '@/lib/api';
+import './factory.css';
 
-type Run={started_at:string;finished_at:string|null;state:string;details:Record<string,number>};
-type Ops={states:Record<string,number>;delivery?:{date:string;delivered:number;target:number;state:string}|null;workerRuns?:Run[];readiness?:{discovered_jobs:number;source_records:number;open_jobs:number;recent_confirmed_publication:number;eligibility_assessments:number;eligibility_evidence:number;active_ats_boards:number;pending_source_candidates:number};integrity?:{approved_knowledge_documents:number;eligible_undelivered_jobs_now:number;integrity_ok:boolean}};
-type Job={id:string;title:string;company_name:string;eligibility:string;source:string;match_score:number|null;source_url:string|null};
-type Step={id:string;number:string;label:string;agent:string;input:string;transform:string;output:string;metric:string;value:number|null;href:string;detail:string;state:'live'|'gate'|'planned'};
-const fmt=(n:number|null)=>n===null?'—':n.toLocaleString();
-function StageIcon({name}:{name:string}){
- const common={width:20,height:20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.7,strokeLinecap:'round' as const,strokeLinejoin:'round' as const};
- const paths:Record<string,React.ReactNode>={
- source:<><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M7 9h10M7 13h7"/></>,
- registry:<><path d="M3 7h18M6 3v4m12-4v4M4 7v13h16V7"/><path d="m9 14 2 2 4-4"/></>,
- worker:<><rect x="5" y="5" width="14" height="14" rx="3"/><path d="M9 1v4m6-4v4M9 19v4m6-4v4M1 9h4M1 15h4m14-6h4m-4 6h4"/></>,
- verify:<><path d="M12 2 4 6v6c0 5 3 8 8 10 5-2 8-5 8-10V6z"/><path d="m8 12 3 3 5-6"/></>,
- match:<><circle cx="8" cy="8" r="3"/><circle cx="17" cy="16" r="3"/><path d="m10 11 4 3M3 20c0-4 2-6 5-6"/></>,
- rank:<><path d="M5 18V9m7 9V4m7 14v-7"/><path d="M2 21h20"/></>,
- batch:<><rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 10h18m-12-8v6m6-6v6"/></>,
- outreach:<><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 7 9-7"/></>
- };
- return <svg {...common} aria-hidden="true">{paths[name]||paths.source}</svg>;
+type Stage='sources'|'registry'|'ingestion'|'eligibility'|'matching'|'ranking'|'delivery'|'knowledge'|'people'|'outreach'|'conversation';
+type EventItem={
+ id:string;run_id?:string|null;job_id?:string|null;stage:Stage;agent:string;type:string;
+ input:Record<string,unknown>;output:Record<string,unknown>;time:string;kind:'instrumented'|'provenance';
+};
+type Role={role:string;total_tasks:number;active:boolean;latest_state:string;latest_at:string|null};
+type WorkerRun={id:string;state:string;started_at:string;finished_at:string|null;details:Record<string,number>};
+type FlowData={
+ observed_at:string;poll_interval_ms:number;stage_counts:Partial<Record<Stage,number|null>>;
+ source_records:number;evidence_records:number;review_pending:number;knowledge_documents:number;
+ latest_batch:{date:string;state:string;target:number;delivered:number}|null;
+ runs:WorkerRun[];roles:Role[];events:EventItem[];
+ jobs:{id:string;title:string;company:string;status:string;published_at:string|null;first_seen_at:string}[];
+ note:string;
+};
+type Snapshot={stage:Stage;time:string|null;before:Record<string,unknown>;after:Record<string,unknown>};
+type JobLineage={
+ job:{id:string;title:string;company:string;status:string;apply_url:string|null};
+ snapshots:Snapshot[];events:EventItem[];tasks:{id:string;task_type:string;state:string}[];note:string;
+};
+type Node={id:Stage;x:number;y:number;name:string;agent:string;transform:string;input:string;output:string;kind:'processor'|'gate'|'agent'|'context'};
+type Edge={from:Stage;to:Stage;path:string};
+const WIDTH=1820,HEIGHT=655,NODE_WIDTH=206,NODE_HEIGHT=170;
+const NODES:Node[]=[
+ {id:'sources',x:36,y:132,name:'Public inputs',agent:'Discovery connectors',transform:'Ingest feed pages and linked employer board references.',input:'Remotive • Himalayas • ATS APIs',output:'Attributed source candidates',kind:'processor'},
+ {id:'registry',x:291,y:132,name:'Source registry',agent:'ATS source gate',transform:'Check provider host, candidate approval and scan rate limit.',input:'Untrusted ATS source proposals',output:'Approved board identifiers',kind:'gate'},
+ {id:'ingestion',x:546,y:132,name:'Normalize jobs',agent:'ATS ingestion worker',transform:'Normalize posting fields, validate IDs, deduplicate and preserve provenance.',input:'Provider-specific job JSON',output:'Canonical jobs + sources',kind:'processor'},
+ {id:'eligibility',x:801,y:132,name:'Verify location',agent:'Eligibility specialist',transform:'Extract official job-scoped evidence, then classify Nigeria eligibility.',input:'Official ATS job + location text',output:'Verified / likely / unknown / excluded',kind:'gate'},
+ {id:'matching',x:1056,y:132,name:'Match profile',agent:'Knowledge matching specialist',transform:'Compare approved knowledge to role and record supported skills and gaps.',input:'Eligible job + approved notes revision',output:'Score, matched skills, gaps',kind:'agent'},
+ {id:'ranking',x:1311,y:132,name:'Policy + ranking',agent:'Preference & dedupe gate',transform:'Apply saved filters and evidence requirements, then rank eligible jobs.',input:'Verified roles + user preferences',output:'Qualifying opportunities',kind:'gate'},
+ {id:'delivery',x:1566,y:132,name:'Daily dispatch',agent:'Batch delivery engine',transform:'Deduplicate employers across all deliveries and assemble the daily batch.',input:'Eligible undelivered employers',output:'Dashboard recommendations',kind:'processor'},
+ {id:'knowledge',x:801,y:433,name:'Approved vault',agent:'Knowledge sync',transform:'Read owner-approved matching-safe knowledge; version and audit changes.',input:'Private Obsidian notes',output:'Approved knowledge revision',kind:'context'},
+ {id:'people',x:1056,y:433,name:'People research',agent:'People specialist',transform:'Investigate public employee evidence for confirmed roles.',input:'Eligible company + role',output:'Public contacts and citations',kind:'agent'},
+ {id:'outreach',x:1311,y:433,name:'Draft outreach',agent:'Outreach specialist',transform:'Prepare reviewable messages; owner approval required for any sending.',input:'Verified person + role context',output:'Drafts / approval records',kind:'gate'},
+ {id:'conversation',x:1566,y:433,name:'Conversations',agent:'Conversation specialist',transform:'Track replies and next actions from recorded conversation evidence.',input:'Actual correspondence',output:'Conversation events',kind:'agent'}
+];
+const EDGES:Edge[]=[
+ {from:'sources',to:'registry',path:'M242 215 H291'},
+ {from:'registry',to:'ingestion',path:'M497 215 H546'},
+ {from:'ingestion',to:'eligibility',path:'M752 215 H801'},
+ {from:'eligibility',to:'matching',path:'M1007 215 H1056'},
+ {from:'matching',to:'ranking',path:'M1262 215 H1311'},
+ {from:'ranking',to:'delivery',path:'M1517 215 H1566'},
+ {from:'knowledge',to:'matching',path:'M904 433 V331 Q904 321 914 321 H1139 Q1159 321 1159 302'},
+ {from:'matching',to:'people',path:'M1192 302 V433'},
+ {from:'people',to:'outreach',path:'M1262 516 H1311'},
+ {from:'outreach',to:'conversation',path:'M1517 516 H1566'}
+];
+const ROLES=[
+ {name:'discovery',node:'sources' as Stage,desc:'Public source discovery'},
+ {name:'eligibility',node:'eligibility' as Stage,desc:'Official posting verification'},
+ {name:'matching',node:'matching' as Stage,desc:'Approved-vault role scoring'},
+ {name:'people',node:'people' as Stage,desc:'Employee / relationship research'},
+ {name:'outreach',node:'outreach' as Stage,desc:'Human-approved drafting'},
+ {name:'conversation',node:'conversation' as Stage,desc:'Replies and next actions'}
+];
+const nfmt=(v:number|null|undefined)=>v===null||v===undefined?'—':v.toLocaleString();
+const pretty=(v:unknown)=>JSON.stringify(v??{},null,2);
+const when=(s:string|null|undefined)=>s?new Date(s).toLocaleString():'Not recorded';
+const rel=(s:string)=>{const d=Date.now()-Date.parse(s);if(d<0)return 'just now';if(d<60000)return Math.floor(d/1000)+'s ago';if(d<3600000)return Math.floor(d/60000)+'m ago';if(d<86400000)return Math.floor(d/3600000)+'h ago';return new Date(s).toLocaleDateString();};
+function StationIcon({kind}:{kind:Node['kind']}){
+ return <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+ {kind==='gate'?<><path d="M12 2 4 6v6c0 5 3 8 8 10 5-2 8-5 8-10V6z"/><path d="m9 12 2 2 4-4"/></>:
+ kind==='context'?<><path d="M4 5.5C7 4 10 4 12 6c2-2 5-2 8-.5V19c-3-1.5-6-1.5-8 .5-2-2-5-2-8-.5zM12 6v13.5"/></>:
+ kind==='agent'?<><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M9 2v3m6-3v3M9 12h.01M15 12h.01M8 16h8"/></>:
+ <><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 10h8M8 14h5"/></>}
+ </svg>;
 }
 export default function FactoryFlow(){
- const ops=useResource<Ops>('operations');
- const jobs=useResource<{jobs:Job[]}>('jobs');
- const knowledge=useResource<{documents:{path:string}[];last_sync?:{finished_at:string}|null}>('knowledge');
- const sources=useResource<{sources:{id:string;name:string;state:string;config:{provider:string;company_name:string}}[]}>('sources');
- const [selected,setSelected]=useState('verify');
- const [view,setView]=useState<'flow'|'runs'>('flow');
- const r=ops.data?.readiness, last=ops.data?.workerRuns?.[0], allJobs=jobs.data?.jobs||[];
- const verified=allJobs.filter(j=>j.eligibility==='verified_eligible').length;
- const likely=allJobs.filter(j=>j.eligibility==='likely_eligible').length;
- const unknown=allJobs.filter(j=>!j.eligibility||j.eligibility==='unknown').length;
- const matched=allJobs.filter(j=>typeof j.match_score==='number').length;
- const live=r!==undefined;
- const steps=useMemo<Step[]>(()=>[
-  {id:'source',number:'01',label:'Inputs',agent:'External feeds + Obsidian',input:'Remotive · Himalayas · official ATS · approved notes',transform:'Receive attributed public vacancies and owner-approved knowledge.',output:'Source references + knowledge versions',metric:'Stored jobs',value:r?.discovered_jobs??null,href:'/opportunities',detail:'Public feeds and approved employer boards provide job leads. Your private approved Obsidian notes provide career context; notes do not become public job evidence.',state:'live'},
-  {id:'registry',number:'02',label:'Source registry',agent:'Source discovery / owner approval',input:'ATS links + proposed employer boards',transform:'Validate provider and board identifiers, require source approval, enforce fixed public API hosts.',output:'Active ATS sources',metric:'Active ATS boards',value:r?.active_ats_boards??null,href:'/operations',detail:'Greenhouse, Lever, and Ashby boards have a separate approval gate. Pending suggestions cannot be scanned as trusted sources. Approval of a board does not verify the jobs on it.',state:'gate'},
-  {id:'worker',number:'03',label:'Ingestion',agent:'Signed CI worker',input:'Approved boards + feed responses',transform:'Bounded fetch, provider rate limiting, normalization, canonical IDs and deduplication.',output:'Companies · jobs · job sources',metric:'Source records',value:r?.source_records??null,href:'/operations',detail:'An HMAC-authenticated worker fetches approved public endpoints, normalizes job records and persists their provenance. Failed provider calls and rejected rows are not counted as valid opportunities.',state:'live'},
-  {id:'verify',number:'04',label:'Eligibility',agent:'Official job review',input:'Job ID + original employer posting',transform:'Extract posting description and structured location; classify evidence with conservative hiring rules.',output:'Verified · likely · unknown · ineligible',metric:'Assessments',value:r?.eligibility_assessments??null,href:'/operations',detail:'An official Nigeria hiring statement or job-scoped Nigeria location can establish verified eligibility. Worldwide wording alone is only likely eligible. Unsupported, stale or contradictory evidence cannot enter the verified delivery path.',state:'gate'},
-  {id:'match',number:'05',label:'Knowledge matching',agent:'Approved-knowledge matcher',input:'Eligible job + matching-safe vault revision',transform:'Refresh verified handoffs, compare role requirements with approved experience, identify matching skills and gaps.',output:'Evidence-linked fit score and gaps',metric:'Visible match scores',value:jobs.data?matched:null,href:'/knowledge',detail:'Only matching-safe and agents-safe approved notes can inform the score. Matching tasks may have no result yet; absent scores are shown as missing, not zero. The architecture has a wider multi-agent design, but no independent six-agent execution should be inferred from this diagram.',state:'live'},
-  {id:'rank',number:'06',label:'Preference gates',agent:'Ranking + policy checks',input:'Verified roles + fit + saved filters',transform:'Check job family, seniority, work mode, sponsorship constraints and recent publication.',output:'Eligible, preference-compatible pool',metric:'Qualified undelivered',value:ops.data?.integrity?.eligible_undelivered_jobs_now??null,href:'/operations',detail:'Ranking prioritizes available fit evidence. The delivery gate separately requires a current verified-eligible assessment, source evidence, current opening, recent published date, saved preferences and no lifetime repeat.',state:'gate'},
-  {id:'batch',number:'07',label:'Daily delivery',agent:'Batch assembly',input:'Qualified and not previously delivered companies',transform:'Lifetime-deduplicate employers and jobs, then select up to the saved daily target.',output:'Today’s opportunities',metric:'Delivered in latest batch',value:ops.data?.delivery?.delivered??(ops.data?0:null),href:'/opportunities',detail:'Daily batch assembly is scheduled for 07:00 Africa/Lagos. Target is a ceiling, not a guarantee. Missing verified jobs produce an honest small or empty batch.',state:'live'},
-  {id:'outreach',number:'08',label:'Human action',agent:'Application / outreach tools',input:'Reviewed jobs + contacts + owner decision',transform:'Track applications, prepare drafts and record responses; require separate authorization before sending.',output:'Applications · draft outreach · conversations',metric:'Delivery target',value:ops.data?.delivery?.target??null,href:'/outreach',detail:'This is a controlled downstream workspace. Gmail sending is not implied by an approved job, and the live worker does not send messages.',state:'gate'}
- ],[r,ops.data,jobs.data,matched]);
- const active=steps.find(s=>s.id===selected)||steps[3];
- function refresh(){ops.reload();jobs.reload();knowledge.reload();sources.reload();}
- return <div className="factory-page">
-  <PageHeading meta="SYSTEM / LIVE DATAFLOW" title="The intelligence factory" description="Follow a job from public source to verified recommendation. Select any station to inspect its inputs, transformations, outputs and live signals." action={<button type="button" className="button-secondary" onClick={refresh}>↻ Refresh data</button>}/>
-  <StateNotice loading={ops.loading||jobs.loading||sources.loading||knowledge.loading} error={ops.error||jobs.error||sources.error||knowledge.error}/>
-  <div className="factory-summary" aria-label="Current system counters">
-   <div><span>Approved ATS boards</span><strong>{fmt(r?.active_ats_boards??null)}</strong></div>
-   <div><span>Stored opportunities</span><strong>{fmt(r?.discovered_jobs??null)}</strong></div>
-   <div><span>Official assessments</span><strong>{fmt(r?.eligibility_assessments??null)}</strong></div>
-   <div><span>Latest batch delivered</span><strong>{fmt(ops.data?.delivery?.delivered??null)}<small> / {fmt(ops.data?.delivery?.target??null)}</small></strong></div>
-  </div>
-  <section className="factory-board" aria-labelledby="factory-board-title">
-   <header className="factory-board-head"><div><span className="factory-kicker">PIPELINE CONTROL ROOM</span><h2 id="factory-board-title">From signal to opportunity</h2><p>{live?'Observed values from your connected workspace. Counts are not additive between stations.':'Loading observed pipeline data; no placeholder counts are shown.'}</p></div>
-    <div className="factory-switch" role="group" aria-label="View type"><button className={view==='flow'?'active':''} type="button" onClick={()=>setView('flow')} aria-pressed={view==='flow'}>Factory map</button><button className={view==='runs'?'active':''} type="button" onClick={()=>setView('runs')} aria-pressed={view==='runs'}>Worker runs</button></div>
-   </header>
-   {view==='flow'?<><div className="factory-rail" aria-label="Select pipeline processing station">
-    {steps.map((s,i)=><div className="factory-rail-unit" key={s.id}><button type="button" className={'factory-station '+(selected===s.id?'selected':'')} aria-pressed={selected===s.id} onClick={()=>setSelected(s.id)}>
-       <div className="factory-station-top"><span>{s.number} / {s.state==='gate'?'GATED':'LIVE PATH'}</span><StageIcon name={s.id}/></div>
-       <strong>{s.label}</strong><small>{s.agent}</small><div className="factory-station-stat"><span>{s.metric}</span><b>{fmt(s.value)}</b></div>
-      </button>{i<steps.length-1&&<div className="factory-connector" aria-hidden="true"><span>→</span></div>}</div>)}
+ const session=useCareerSession();
+ const flow=useResource<FlowData>('flow');
+ const [polling,setPolling]=useState(true);
+ const [view,setView]=useState<'live'|'replay'>('live');
+ const [selectedStage,setSelectedStage]=useState<Stage>('eligibility');
+ const [eventIndex,setEventIndex]=useState(0);
+ const [replayPlaying,setReplayPlaying]=useState(false);
+ const [replaySpeed,setReplaySpeed]=useState(1);
+ const [inspectorTab,setInspectorTab]=useState<'event'|'lineage'>('event');
+ const [selectedJob,setSelectedJob]=useState('');
+ const [lineage,setLineage]=useState<JobLineage|null>(null);
+ const [lineageError,setLineageError]=useState<string|null>(null);
+ const [lineageBusy,setLineageBusy]=useState(false);
+ const [zoom,setZoom]=useState(1);
+ const [agentExpanded,setAgentExpanded]=useState(true);
+ const [feedExpanded,setFeedExpanded]=useState(true);
+ const scrollRef=useRef<HTMLDivElement>(null);
+ const interval=flow.data?.poll_interval_ms??8000;
+ useEffect(()=>{
+   if(!polling)return;
+   const timer=setInterval(()=>flow.reload(),Math.max(5000,interval));
+   return ()=>clearInterval(timer);
+ },[polling,flow.reload,interval]);
+ useEffect(()=>{
+   if(!flow.data?.jobs?.length||selectedJob)return;
+   setSelectedJob(flow.data.jobs[0].id);
+ },[flow.data,selectedJob]);
+ useEffect(()=>{
+   if(!selectedJob){setLineage(null);return;}
+   const ctl=new AbortController();
+   setLineageBusy(true);setLineageError(null);
+   ciFetch<JobLineage>('flow/jobs/'+selectedJob,session,{signal:ctl.signal}).then(v=>{
+     if(!ctl.signal.aborted)setLineage(v);
+   }).catch(e=>{if(!ctl.signal.aborted){setLineage(null);setLineageError(e instanceof Error?e.message:'Lineage unavailable');}})
+    .finally(()=>{if(!ctl.signal.aborted)setLineageBusy(false);});
+   return ()=>ctl.abort();
+ },[selectedJob,session,flow.data?.observed_at]);
+ const events=flow.data?.events||[];
+ const replayEvent=events[Math.min(eventIndex,Math.max(0,events.length-1))];
+ useEffect(()=>{
+   if(view!=='replay'||!replayPlaying||events.length<2)return;
+   const timer=setInterval(()=>setEventIndex(index=>index<=0?events.length-1:index-1),Math.max(350,1800/replaySpeed));
+   return ()=>clearInterval(timer);
+ },[view,replayPlaying,events.length,replaySpeed]);
+ useEffect(()=>{
+   if(view==='replay'&&replayPlaying&&replayEvent)setSelectedStage(replayEvent.stage);
+ },[view,replayPlaying,replayEvent?.id]);
+ const instrumentedRecent=useMemo(()=>events.filter(e=>
+   e.kind==='instrumented'&&Date.now()-Date.parse(e.time)<120000&&Date.now()>=Date.parse(e.time)-5000
+ ),[events]);
+ const liveRun=flow.data?.runs.some(r=>r.state==='running'&&!r.finished_at&&Date.now()-Date.parse(r.started_at)<900000)??false;
+ const recentStages=new Set(instrumentedRecent.map(e=>e.stage));
+ const highlighted=new Set<Stage>(view==='replay'&&replayEvent?[replayEvent.stage]:[...recentStages]);
+ const stage= NODES.find(n=>n.id===selectedStage)||NODES[3];
+ const selectedRole=ROLES.find(r=>r.node===selectedStage);
+ const roleState=flow.data?.roles.find(x=>x.role===selectedRole?.name);
+ const currentEvent=view==='replay'?replayEvent:events.find(e=>e.stage===selectedStage&&e.kind==='instrumented')||events.find(e=>e.stage===selectedStage)||events[0];
+ const jobSnapshot=lineage?.snapshots.find(s=>s.stage===selectedStage)||lineage?.snapshots[0];
+ const payloadBefore=inspectorTab==='event'?currentEvent?.input:jobSnapshot?.before;
+ const payloadAfter=inspectorTab==='event'?currentEvent?.output:jobSnapshot?.after;
+ function chooseEvent(index:number){
+  setEventIndex(index);setView('replay');setReplayPlaying(false);setInspectorTab('event');
+  const e=events[index];if(e){setSelectedStage(e.stage);if(e.job_id)setSelectedJob(e.job_id);}
+ }
+ function chooseStage(id:Stage){setSelectedStage(id);setInspectorTab('lineage');}
+ function goToStage(){
+   const item=NODES.find(n=>n.id===selectedStage);
+   if(!item||!scrollRef.current)return;
+   scrollRef.current.scrollTo({left:Math.max(0,(item.x+NODE_WIDTH/2)*zoom-scrollRef.current.clientWidth/2),behavior:'smooth'});
+ }
+ return <div className="factory-v2">
+ <PageHeading meta="INTELLIGENCE SYSTEM / OBSERVABILITY" title="The factory floor" description="Watch your real source, normalization, verification and agent pipeline. Inspect how each recorded job changes as it moves between services." action={<div className="factory-heading-actions">
+   <span className={'factory-live-pill '+(polling?'on':'off')}><span/>{polling?'Polling every '+Math.round(interval/1000)+'s':'Updates paused'}</span>
+   <button className="button-secondary" type="button" onClick={()=>{flow.reload();}}>Refresh now</button>
+ </div>}/>
+ <StateNotice loading={!flow.data&&flow.loading} error={flow.error}/>
+ <section className="factory-v2-summary" aria-label="Observed pipeline totals">
+  {[
+   {label:'Registered ATS boards',value:flow.data?.stage_counts.registry,icon:'◎'},
+   {label:'Canonical jobs',value:flow.data?.stage_counts.ingestion,icon:'▤'},
+   {label:'Eligibility evidence',value:flow.data?.evidence_records,icon:'◈'},
+   {label:'Daily batch',value:flow.data?.latest_batch?.delivered??null,suffix:flow.data?.latest_batch?' / '+flow.data.latest_batch.target:'',icon:'↗'}
+  ].map(item=><div className="factory-v2-metric" key={item.label}><span className="factory-v2-metric-icon" aria-hidden="true">{item.icon}</span><div><span>{item.label}</span><strong>{nfmt(item.value)}<small>{item.suffix}</small></strong></div></div>)}
+ </section>
+ <section className="factory-v2-main" aria-labelledby="flow-map-title">
+  <header className="factory-v2-toolbar">
+   <div><span className="factory-eyebrow">LIVE TOPOLOGY / 11 STATIONS</span><h2 id="flow-map-title">Processing network</h2><p>Click any station to inspect its execution, fields, and latest recorded transformations.</p></div>
+   <div className="factory-v2-controls">
+    <div className="factory-v2-segmented" role="group" aria-label="Chart playback mode">
+     <button type="button" className={view==='live'?'active':''} aria-pressed={view==='live'} onClick={()=>{setView('live');setReplayPlaying(false);}}>Live map</button>
+     <button type="button" className={view==='replay'?'active':''} aria-pressed={view==='replay'} onClick={()=>{setView('replay');setEventIndex(Math.max(0,events.length-1));setReplayPlaying(events.length>1);}}>Replay events</button>
+    </div>
+    <button type="button" className="factory-v2-iconbutton" aria-label={polling?'Pause polling':'Resume polling'} onClick={()=>setPolling(v=>!v)}>{polling?'Ⅱ':'▶'}</button>
+    <div className="factory-v2-zoom" aria-label="Chart zoom controls">
+     <button type="button" aria-label="Zoom out" onClick={()=>setZoom(v=>Math.max(.7,Number((v-.1).toFixed(2))))}>−</button><span>{Math.round(zoom*100)}%</span><button type="button" aria-label="Zoom in" onClick={()=>setZoom(v=>Math.min(1.3,Number((v+.1).toFixed(2))))}>+</button>
+    </div>
+    <button className="factory-v2-ghost" type="button" onClick={()=>{setZoom(1);scrollRef.current?.scrollTo({left:0,behavior:'smooth'});}}>Fit</button>
    </div>
-   <div className="factory-inspector" aria-live="polite"><div className="factory-inspector-copy">
-    <div className="factory-kicker">STATION {active.number} / TRANSFORMATION DETAIL</div><h3>{active.label}</h3><p>{active.detail}</p>
-    <Link href={active.href} className="factory-deep-link">Open related workspace <span aria-hidden="true">↗</span></Link>
-   </div><div className="factory-transform">
-    <div><span>INPUT</span><p>{active.input}</p></div><div className="factory-transform-arrow" aria-hidden="true">↓</div>
-    <div className="factory-transform-work"><span>PROCESSING</span><p>{active.transform}</p></div><div className="factory-transform-arrow" aria-hidden="true">↓</div>
-    <div><span>OUTPUT</span><p>{active.output}</p></div>
-   </div></div></>:<div className="factory-run-list">
-     {(ops.data?.workerRuns||[]).map((run,i)=><article key={i} className="factory-run"><div><strong>{run.state}</strong><span>{new Date(run.started_at).toLocaleString()}</span></div><div><span>Boards scanned</span><b>{run.details?.boards_scanned??'Not recorded'}</b></div><div><span>ATS jobs ingested</span><b>{run.details?.ats_jobs??0}</b></div><div><span>Reviews</span><b>{run.details?.reviewed??0}</b></div><div><span>Failures</span><b>{run.details?.failures??0}</b></div></article>)}
-     {ops.data?.workerRuns?.length===0&&<p className="muted">No observed worker runs available.</p>}
-    </div>}
-  </section>
-  <div className="factory-bottom">
-   <section className="workspace-surface"><div className="section-title"><div><h2>Eligibility sorting line</h2><p className="muted">Current statuses across the jobs returned by the dashboard API, not all historical assessments.</p></div></div>
-    <div className="factory-outcomes"><div className="verified"><strong>{jobs.data?verified:'—'}</strong><span>Verified eligible</span></div><div className="likely"><strong>{jobs.data?likely:'—'}</strong><span>Likely eligible</span></div><div><strong>{jobs.data?unknown:'—'}</strong><span>Unknown / unassessed</span></div><div className="ineligible"><strong>{jobs.data?allJobs.filter(j=>j.eligibility==='ineligible').length:'—'}</strong><span>Ineligible</span></div></div>
-    <p className="factory-note">Only verified-eligible jobs with current evidence can reach the delivery stage. A record can have a valid source and still fail eligibility.</p>
-   </section>
-   <section className="workspace-surface"><div className="section-title"><div><h2>Factory inputs & controls</h2><p className="muted">Live registry and approved knowledge only.</p></div></div>
-    <div className="factory-input-row"><span>ATS board registry</span><b>{sources.data?sources.data.sources.filter(s=>s.state==='active').length:'—'}</b></div>
-    <div className="factory-input-row"><span>Approved knowledge documents</span><b>{knowledge.data?knowledge.data.documents.length:'—'}</b></div>
-    <div className="factory-input-row"><span>Source candidates awaiting approval</span><b>{fmt(r?.pending_source_candidates??null)}</b></div>
-    <div className="factory-input-row"><span>Latest worker run</span><b>{last?last.state:'Not recorded'}</b></div>
-    <div className="factory-input-row"><span>Production integrity</span><b>{ops.data?.integrity?(ops.data.integrity.integrity_ok?'Passing':'Attention required'):'Not available'}</b></div>
-    <Link className="factory-deep-link" href="/operations">Inspect agent operations ↗</Link>
-   </section>
+  </header>
+  <div className="factory-v2-viewport" ref={scrollRef} tabIndex={0} aria-label="Scrollable interactive dataflow graph; use the stage buttons to inspect">
+   <div className="factory-v2-canvas-holder" style={{width:WIDTH*zoom,height:HEIGHT*zoom}}>
+    <div className="factory-v2-canvas" style={{width:WIDTH,height:HEIGHT,transform:'scale('+zoom+')',transformOrigin:'top left'}}>
+     <div className="factory-v2-lane first"><span>01 / PUBLIC SIGNALS</span><span>02 / CANONICAL PROCESSING & EVIDENCE</span></div>
+     <div className="factory-v2-lane second"><span>PRIVATE KNOWLEDGE</span><span>03 / OPTIONAL SPECIALIST AGENTS · HUMAN APPROVAL</span></div>
+     <svg className="factory-v2-edges" width={WIDTH} height={HEIGHT} viewBox={'0 0 '+WIDTH+' '+HEIGHT} aria-hidden="true">
+      <defs><marker id="factory-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7" fill="none" stroke="#7ca8c4" strokeWidth="1.4"/></marker><marker id="factory-arrow-active" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7" fill="none" stroke="#73ebc5" strokeWidth="1.4"/></marker></defs>
+      {EDGES.map((e,i)=>{
+       const moving=highlighted.has(e.from)||highlighted.has(e.to);
+       return <g key={e.from+'-'+e.to}>
+        <path d={e.path} fill="none" className={'factory-v2-edge '+(moving?'moving':'')} markerEnd={moving?'url(#factory-arrow-active)':'url(#factory-arrow)'}/>
+        {moving&&<circle r="4" className="factory-v2-packet" key={(view==='replay'?replayEvent?.id:'live')+'-'+i}><animateMotion dur={(2.4+i%3*.4)+'s'} repeatCount="indefinite" path={e.path}/></circle>}
+       </g>;
+      })}
+     </svg>
+     {NODES.map(n=>{
+      const active=highlighted.has(n.id);
+      const value=flow.data?.stage_counts[n.id];
+      const role=ROLES.find(r=>r.node===n.id);
+      const running=role&&flow.data?.roles.find(r=>r.role===role.name)?.active;
+      return <button key={n.id} type="button" className={'factory-v2-node '+(selectedStage===n.id?'selected ':'')+(active?'pulsing ':'')+(running?'running':'')}
+        style={{left:n.x,top:n.y,width:NODE_WIDTH,height:NODE_HEIGHT}} aria-pressed={selectedStage===n.id} onClick={()=>chooseStage(n.id)}>
+        <span className="factory-v2-node-top"><span className={'factory-v2-node-icon kind-'+n.kind}><StationIcon kind={n.kind}/></span><span className="factory-v2-node-status"><i className={running?'active':active?'recent':''}/>{running?'Running':active?(view==='replay'?'Replay':'Observed'):'Idle'}</span></span>
+        <strong>{n.name}</strong><small>{n.agent}</small>
+        <span className="factory-v2-node-bottom"><span>{n.id==='registry'?'Sources':n.id==='eligibility'?'Assessments':n.id==='knowledge'?'Notes':n.id==='delivery'?'Delivered':'Records'}</span><b>{nfmt(value)}</b></span>
+       </button>;
+     })}
+     <span className="factory-v2-canvas-note">Solid animation = instrumented recent activity or explicitly selected replay. Static connections = architectural paths, not proof of execution.</span>
+    </div>
+   </div>
   </div>
+  <footer className="factory-v2-map-footer">
+   <div><span className="factory-v2-legenddot recent"/><span>Observed activity</span><span className="factory-v2-legenddot archived"/><span>Idle path</span><span className="factory-v2-legenddot selected"/><span>Selected station</span></div>
+   <button type="button" className="factory-v2-ghost" onClick={goToStage}>Center selected station ↗</button>
+  </footer>
+  {view==='replay'&&<div className="factory-v2-replay">
+    <div><b>Historical event replay</b><span>{replayEvent?when(replayEvent.time)+' · '+replayEvent.agent:'No recorded events'}</span></div>
+    <button type="button" className="factory-v2-replay-play" disabled={events.length<2} onClick={()=>setReplayPlaying(v=>!v)}>{replayPlaying?'Ⅱ Pause':'▶ Play'}</button>
+    <input type="range" min={0} max={Math.max(0,events.length-1)} step={1} value={Math.min(eventIndex,Math.max(0,events.length-1))} disabled={!events.length} aria-label="Replay recorded event" onChange={e=>chooseEvent(Number(e.target.value))}/>
+    <span>{events.length?String(Math.min(eventIndex+1,events.length))+' / '+events.length:'0 / 0'}</span>
+    <select aria-label="Replay speed" value={replaySpeed} onChange={e=>setReplaySpeed(Number(e.target.value))}><option value={1}>1×</option><option value={2}>2×</option><option value={4}>4×</option></select>
+  </div>}
+ </section>
+ <div className="factory-v2-grid">
+  <section className="factory-v2-panel factory-v2-agents" aria-labelledby="agents-title">
+   <div className="factory-v2-panel-header"><div><span className="factory-eyebrow">LANGGRAPH / 6 ROLES</span><h2 id="agents-title">Specialist agents</h2></div><button type="button" className="factory-v2-ghost" aria-expanded={agentExpanded} onClick={()=>setAgentExpanded(v=>!v)}>{agentExpanded?'Collapse':'Expand'}</button></div>
+   <p className="factory-v2-panel-sub">These are the six configured graph roles. Execution status comes from actual workflow task records, not animation.</p>
+   {agentExpanded&&<div className="factory-v2-agentlist">{ROLES.map((role,i)=>{
+    const status=flow.data?.roles.find(r=>r.role===role.name);
+    return <button type="button" key={role.name} className={'factory-v2-agent '+(selectedStage===role.node?'selected':'')} onClick={()=>chooseStage(role.node)}>
+     <span className="factory-v2-agent-order">{String(i+1).padStart(2,'0')}</span>
+     <span className="factory-v2-agent-info"><strong>{role.name.charAt(0).toUpperCase()+role.name.slice(1)} agent</strong><small>{role.desc}</small></span>
+     <span className={'factory-v2-agent-status '+(status?.active?'busy':'')}>{status?.active?'RUNNING':status?.latest_state==='not_observed'?'NO RUN':(status?.latest_state||'NO DATA').toUpperCase()}</span>
+    </button>;
+   })}</div>}
+   <div className="factory-v2-agent-caution">Worker functions can perform ingestion and eligibility without a separate LangGraph run. An idle role does not mean scheduled collection is broken.</div>
+  </section>
+  <section className="factory-v2-panel factory-v2-details" aria-labelledby="details-title">
+   <div className="factory-v2-panel-header"><div><span className="factory-eyebrow">NODE INSPECTOR / {selectedStage.toUpperCase()}</span><h2 id="details-title">{stage.name}</h2></div><span className="factory-v2-stage-chip">{stage.kind}</span></div>
+   <div className="factory-v2-transform-line"><div><span>INPUT</span><p>{stage.input}</p></div><span aria-hidden="true">→</span><div><span>TRANSFORM</span><p>{stage.transform}</p></div><span aria-hidden="true">→</span><div><span>OUTPUT</span><p>{stage.output}</p></div></div>
+   <div className="factory-v2-details-meta">
+    <div><span>Component</span><strong>{stage.agent}</strong></div>
+    <div><span>Recorded stage events</span><strong>{events.filter(e=>e.stage===selectedStage).length}</strong></div>
+    <div><span>Specialist task state</span><strong>{roleState?.latest_state?.replaceAll('_',' ')||'Not applicable'}</strong></div>
+    <div><span>Most recent event</span><strong>{events.find(e=>e.stage===selectedStage)?rel(events.find(e=>e.stage===selectedStage)!.time):'Not observed'}</strong></div>
+   </div>
+  </section>
+ </div>
+ <div className="factory-v2-grid lower">
+  <section className="factory-v2-panel factory-v2-timeline" aria-labelledby="eventstream-title">
+   <div className="factory-v2-panel-header"><div><span className="factory-eyebrow">OBSERVABILITY / TIMELINE</span><h2 id="eventstream-title">Processing events</h2></div><button type="button" className="factory-v2-ghost" aria-expanded={feedExpanded} onClick={()=>setFeedExpanded(v=>!v)}>{feedExpanded?'Hide feed':'Show feed'}</button></div>
+   <p className="factory-v2-panel-sub">New instrumented events are recorded at execution time. Older events are provenance snapshots, labeled separately.</p>
+   {feedExpanded&&<div className="factory-v2-eventlist">
+    {events.slice(0,70).map((e,i)=><button key={e.id} type="button" className={'factory-v2-event '+(currentEvent?.id===e.id?'selected':'')} onClick={()=>chooseEvent(i)}>
+     <span className={'factory-v2-event-bullet '+(e.kind==='instrumented'?'instrumented':'provenance')} aria-hidden="true"/>
+     <span className="factory-v2-event-main"><strong>{e.type.replaceAll('_',' ')}</strong><small>{e.agent} · {e.stage}</small></span>
+     <span className="factory-v2-event-right"><span>{rel(e.time)}</span><small>{e.kind==='instrumented'?'Worker trace':'DB record'}</small></span>
+    </button>)}
+    {flow.data&&events.length===0&&<p className="factory-v2-empty">No persisted transformation events yet. The pipeline may be idle; the next worker execution will emit structured telemetry.</p>}
+   </div>}
+  </section>
+  <section className="factory-v2-panel factory-v2-payload" aria-labelledby="payload-title">
+   <div className="factory-v2-panel-header"><div><span className="factory-eyebrow">DATA SHAPE / BEFORE → AFTER</span><h2 id="payload-title">Transformation inspector</h2></div><div className="factory-v2-segmented" role="group" aria-label="Inspector data source"><button type="button" className={inspectorTab==='event'?'active':''} aria-pressed={inspectorTab==='event'} onClick={()=>setInspectorTab('event')}>Event</button><button type="button" className={inspectorTab==='lineage'?'active':''} aria-pressed={inspectorTab==='lineage'} onClick={()=>setInspectorTab('lineage')}>Job lineage</button></div></div>
+   <div className="factory-v2-job-select"><label htmlFor="factory-job">Trace a job</label><select id="factory-job" value={selectedJob} onChange={e=>{setSelectedJob(e.target.value);setInspectorTab('lineage');}}><option value="">Select a stored job</option>{(flow.data?.jobs||[]).map(j=><option key={j.id} value={j.id}>{j.company} · {j.title}</option>)}</select></div>
+   {inspectorTab==='lineage'&&<div className="factory-v2-snapshot-tabs" role="group" aria-label="Recorded job transformation stages">
+    {(lineage?.snapshots||[]).map((s,i)=><button type="button" className={jobSnapshot===s?'active':''} key={s.stage+i} onClick={()=>setSelectedStage(s.stage)}>{s.stage.replaceAll('_',' ')}</button>)}
+    {lineageBusy&&<span>Loading lineage…</span>}
+   </div>}
+   <div className="factory-v2-data-meta">
+    <span>{inspectorTab==='event'?(currentEvent?currentEvent.type.replaceAll('_',' ')+' · '+when(currentEvent.time):'No event selected'):(jobSnapshot?jobSnapshot.stage+' · '+when(jobSnapshot.time):'No saved snapshot for this job')}</span>
+    <span>{inspectorTab==='event'&&currentEvent?.kind==='provenance'?'Historical record, not live agent output':inspectorTab==='event'?'Recorded event':'Persisted job data'}</span>
+   </div>
+   {lineageError&&inspectorTab==='lineage'&&<p className="error-message">{lineageError}</p>}
+   <div className="factory-v2-json-pair">
+    <div className="factory-v2-codebox"><div className="factory-v2-codehead"><span>INPUT / BEFORE</span><span>JSON</span></div><pre>{pretty(payloadBefore)}</pre></div>
+    <div className="factory-v2-codebox after"><div className="factory-v2-codehead"><span>OUTPUT / AFTER</span><span>JSON</span></div><pre>{pretty(payloadAfter)}</pre></div>
+   </div>
+   <p className="factory-v2-payload-note">Only stored, allowlisted metadata is shown. Raw ATS responses and private note bodies are never replayed as if they were retained.</p>
+  </section>
+ </div>
+ <section className="factory-v2-bottom" aria-label="Runtime health">
+  <div><span className="factory-v2-health-dot"/><span>Last API observation</span><strong>{when(flow.data?.observed_at)}</strong></div>
+  <div><span>Latest signed worker</span><strong>{flow.data?.runs[0]?flow.data.runs[0].state+' · '+rel(flow.data.runs[0].started_at):'Not recorded'}</strong></div>
+  <div><span>Pending official reviews</span><strong>{nfmt(flow.data?.review_pending)}</strong></div>
+  <Link href="/operations">Open agent operations <span aria-hidden="true">↗</span></Link>
+ </section>
+ <p className="factory-v2-disclaimer">Live mode polls the owner-gated API every {Math.round(interval/1000)} seconds; it is not a continuously streamed socket. Animated packets appear for recently recorded worker stage events, or when you deliberately replay historical activity. They do not represent synthetic jobs or unobserved agent execution.</p>
  </div>;
 }

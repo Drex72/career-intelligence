@@ -77,3 +77,12 @@ test('owner preferences are an explicit authenticated read and save route',()=>{
   assert.deepEqual(route('https://localhost/api/ci/preferences','POST'),{type:'savePreferences'});
   assert.equal(route('https://localhost/api/ci/preferences/override','POST'),null);
 });
+
+test('factory event and lineage requests never become mutation routes',()=>{
+ const id='f59015fd-927f-4cee-a023-0d9784e19171';
+ assert.deepEqual(route('https://localhost/api/ci/flow','GET'),{type:'read',path:'flow'});
+ assert.deepEqual(route('https://localhost/api/ci/flow/jobs/'+id,'GET'),{type:'flowJob',jobId:id});
+ assert.equal(route('https://localhost/api/ci/flow','POST'),null);
+ assert.equal(route('https://localhost/api/ci/flow/jobs/'+id,'POST'),null);
+ assert.equal(route('https://localhost/api/ci/flow/jobs/bad','GET'),null);
+});

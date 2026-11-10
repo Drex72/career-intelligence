@@ -1,5 +1,5 @@
 /** Pure routing and validation helpers shared by Node tests and the Edge runtime. */
-export const readRoutes = new Set(['metrics', 'jobs', 'people', 'applications', 'knowledge', 'outreach', 'conversations', 'operations','sources','eligibility-queue','source-candidates','preferences']);
+export const readRoutes = new Set(['metrics', 'jobs', 'people', 'applications', 'knowledge', 'outreach', 'conversations', 'operations','sources','eligibility-queue','source-candidates','preferences','flow']);
 export const statuses = new Set(['discovered', 'saved', 'applied', 'interviewing', 'offer', 'rejected', 'withdrawn']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const isUuid = (value) => typeof value === 'string' && uuid.test(value);
@@ -10,6 +10,7 @@ export function route(url, method) {
   if (at === -1) return null;
   const path = p.slice(at + marker.length);
   if (method === 'GET' && readRoutes.has(path)) return {type:'read',path};
+  if (method === 'GET' && /^flow\/jobs\/[0-9a-f-]{36}$/i.test(path) && isUuid(path.split('/')[2])) return {type:'flowJob',jobId:path.split('/')[2]};
   if (method === 'GET' && /^jobs\/[0-9a-f-]{36}\/evidence$/i.test(path) && isUuid(path.split('/')[1])) return {type:'evidence',jobId:path.split('/')[1]};
   if (method === 'GET' && /^batches\/\d{4}-\d{2}-\d{2}$/.test(path)) return {type:'batch',day:path.slice(8)};
   if (method === 'POST' && path === 'sources') return {type:'registerSource'};
