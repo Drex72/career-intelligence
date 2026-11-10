@@ -118,3 +118,24 @@ excluded from the agent retrieval index.
 It only reads safe company-hosted `/team` pages and parses structured Person
 entries. No addresses are guessed, no private profiles are scraped, and no
 messages are sent.
+
+## Next.js dashboard (apps/web)
+
+`apps/web` provides the signed-in overview, discovery, application tracker,
+people intelligence, knowledge index, outreach drafts, and workflow operations.
+This dashboard never connects directly to privileged `ci_` tables.
+
+Configure these Vercel or server values:
+
+- `NEXT_PUBLIC_SUPABASE_URL`: the Groundwork Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`: publishable-only Supabase key
+- `CI_BACKEND_URL`: HTTPS endpoint of the private Career Intelligence Python API
+
+The Next.js server proxies a strict allowlist of private `/api/ci/` endpoints,
+and the Python API independently validates the user's Supabase token and owner
+UUID. No service-role key belongs in this app. Database credentials must remain
+on the backend server, which must not be publicly exposed before HTTPS,
+ingress restrictions and integration testing.
+
+Run `npm install` and `npm run dev` in `apps/web`, after starting `pg-serve`.
+Deployment is still pending appropriate private hosting and configuration.

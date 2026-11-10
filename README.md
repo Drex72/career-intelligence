@@ -109,3 +109,13 @@ The shared Groundwork database uses 40 isolated `ci_` tables and migration
 research deduplication and function search-path hardening. All automatic
 email sending and paid lookups remain disabled. The full Next.js product UI,
 private Obsidian Git synchronization, and Gmail OAuth are still outstanding.
+
+### Next.js dashboard source
+
+The `apps/web/` directory contains a responsive, dark-first Next.js dashboard
+with authenticated Groundwork Supabase sign-in and owner-gated backend reads.
+Sections include real daily batches, job listings, application statuses, people,
+knowledge metadata, outreach drafts and workflow operations. The client never
+exposes PostgreSQL passwords, OAuth refresh secrets, or privileged database keys.
+The dashboard requires `CI_BACKEND_URL` and Supabase publishable settings to run.
+It has not yet been deployed to a production public URL.

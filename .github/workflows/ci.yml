@@ -53,3 +53,26 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_postgres_knowledge.py -v
       - name: Exercise six-role LangGraph routing and checkpoints
         run: python -m pytest services/worker/tests/integration/test_langgraph_runtime.py -v
+  web-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned dashboard dependencies
+        working-directory: apps/web
+        run: npm install --no-audit --no-fund
+      - name: Run dashboard behavior tests
+        working-directory: apps/web
+        run: npm test
+      - name: Check dashboard TypeScript
+        working-directory: apps/web
+        run: npm run typecheck
+      - name: Build Next.js dashboard
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://test.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-public-test-key
+          CI_BACKEND_URL: http://127.0.0.1:8000
+        run: npm run build

@@ -254,3 +254,66 @@ class PostgresCareerCatalog:
                    current_title=excluded.current_title RETURNING id""",
                  (company_id,contact['name'],contact['title'],url,source)).fetchone()
             return str(row['id'])
+
+    def list_jobs(self, limit: int = 100) -> list[dict]:
+        if not 1<=limit<=500:raise ValueError('limit must be 1..500')
+        rows=self.conn.execute("""SELECT j.id,j.title,j.apply_url,j.status,
+          j.published_at,j.first_seen_at,c.id AS company_id,c.legal_name AS company_name,
+          a.status AS eligibility,COALESCE(m.score,0) AS match_score
+          FROM ci_jobs j JOIN ci_companies c ON c.id=j.company_id
+          LEFT JOIN LATERAL (SELECT status FROM ci_eligibility_assessments a
+             WHERE a.job_id=j.id ORDER BY assessed_at DESC,id DESC LIMIT 1) a ON true
+          LEFT JOIN LATERAL (SELECT score FROM ci_job_matches m
+             WHERE m.job_id=j.id ORDER BY computed_at DESC LIMIT 1) m ON true
+          ORDER BY j.published_at DESC NULLS LAST,j.first_seen_at DESC LIMIT %s""",(limit,)).fetchall()
+        return [{**dict(x),'id':str(x['id']),'company_id':str(x['company_id'])} for x in rows]
+
+    def list_contacts(self, limit: int = 100) -> list[dict]:
+        if not 1<=limit<=500:raise ValueError('limit must be 1..500')
+        rows=self.conn.execute("""SELECT p.id,p.name,p.current_title,p.profile_url,
+          p.identity_verified,c.legal_name AS company_name
+          FROM ci_contacts p JOIN ci_companies c ON c.id=p.company_id
+          ORDER BY p.created_at DESC LIMIT %s""",(limit,)).fetchall()
+        return [{**dict(x),'id':str(x['id'])} for x in rows]
+
+    def list_knowledge_index(self) -> list[dict]:
+        rows=self.conn.execute("""SELECT path,visibility,git_sha,content_sha,updated_at
+          FROM ci_knowledge_documents WHERE status='approved' ORDER BY path""").fetchall()
+        return [dict(x) for x in rows]
+
+    def list_applications(self, owner: UUID) -> list[dict]:
+        rows=self.conn.execute("""SELECT a.id,a.job_id,a.status,a.applied_at,a.notes,
+          j.title,c.legal_name AS company_name,j.apply_url
+          FROM ci_applications a JOIN ci_jobs j ON j.id=a.job_id
+          JOIN ci_companies c ON c.id=a.company_id
+          WHERE a.owner_user_id=%s ORDER BY a.applied_at DESC NULLS LAST""",(owner,)).fetchall()
+        return [{**dict(x),'id':str(x['id']),'job_id':str(x['job_id'])} for x in rows]
+
+    def list_outreach(self,owner:UUID) -> list[dict]:
+        rows=self.conn.execute("""SELECT o.id,o.job_id,o.contact_id,o.subject,o.body,o.status,o.created_at
+          FROM ci_outreach_drafts o WHERE o.owner_user_id=%s
+          ORDER BY o.created_at DESC LIMIT 100""",(owner,)).fetchall()
+        return [{**dict(x),'id':str(x['id']),'job_id':str(x['job_id']),
+                  'contact_id':str(x['contact_id'])} for x in rows]
+
+    def operations(self) -> dict:
+        rows=self.conn.execute('SELECT state,count(*) as total FROM ci_workflow_tasks GROUP BY state').fetchall()
+        return {r['state']:r['total'] for r in rows}
+
+    def record_application(self,owner:UUID,job_id:str,status:str,notes:str='')->str:
+        if status not in {'discovered','saved','applied','interviewing','offer','rejected','withdrawn'}:
+            raise ValueError('invalid application status')
+        if len(notes)>1000:raise ValueError('notes too long')
+        with self.conn.transaction():
+            job=self.conn.execute('SELECT company_id FROM ci_jobs WHERE id=%s',(job_id,)).fetchone()
+            if not job:raise KeyError(job_id)
+            record=self.conn.execute("""INSERT INTO ci_applications
+                (owner_user_id,company_id,job_id,status,notes,applied_at)
+                VALUES (%s,%s,%s,%s,%s,CASE WHEN %s='applied' THEN now() ELSE null END)
+                ON CONFLICT(owner_user_id,job_id) DO UPDATE SET
+                   status=excluded.status,notes=excluded.notes,
+                   applied_at=COALESCE(ci_applications.applied_at,excluded.applied_at)
+                RETURNING id""",(owner,job['company_id'],job_id,status,notes,status)).fetchone()
+            self.conn.execute("""INSERT INTO ci_application_events(application_id,event_type,details)
+                VALUES (%s,%s,'{}'::jsonb)""",(record['id'],status))
+            return str(record['id'])

@@ -2,7 +2,16 @@
 from __future__ import annotations
 from datetime import date
 from fastapi import FastAPI,Header,HTTPException,Depends
+from pydantic import BaseModel,Field
+from typing import Literal
+from uuid import UUID
 from career.persistence.postgres_catalog import PostgresCareerCatalog
+
+
+class ApplicationInput(BaseModel):
+    job_id: UUID
+    status: Literal['discovered','saved','applied','interviewing','offer','rejected','withdrawn']
+    notes: str = Field(default='',max_length=1000)
 
 
 def make_pg_app(dsn: str, owner_auth, *, store_factory=PostgresCareerCatalog) -> FastAPI:
@@ -28,5 +37,43 @@ def make_pg_app(dsn: str, owner_auth, *, store_factory=PostgresCareerCatalog) ->
     def batch(day:date,owner=Depends(require_owner)):
         with store_factory(dsn) as catalog:
             return {'items':catalog.list_batch(owner,day)}
+
+    @app.get('/api/ci/jobs')
+    def jobs(limit:int=100,owner=Depends(require_owner)):
+        with store_factory(dsn) as catalog:
+            return {'jobs':catalog.list_jobs(min(max(limit,1),500))}
+
+    @app.get('/api/ci/people')
+    def people(owner=Depends(require_owner)):
+        with store_factory(dsn) as catalog:
+            return {'contacts':catalog.list_contacts()}
+
+    @app.get('/api/ci/knowledge')
+    def knowledge(owner=Depends(require_owner)):
+        with store_factory(dsn) as catalog:
+            return {'documents':catalog.list_knowledge_index()}
+
+    @app.get('/api/ci/applications')
+    def applications(owner=Depends(require_owner)):
+        with store_factory(dsn) as catalog:
+            return {'applications':catalog.list_applications(owner)}
+
+    @app.post('/api/ci/applications')
+    def save_application(body:ApplicationInput,owner=Depends(require_owner)):
+        with store_factory(dsn) as catalog:
+            try:
+                return {'id':catalog.record_application(owner,str(body.job_id),body.status,body.notes)}
+            except KeyError:
+                raise HTTPException(status_code=404,detail='Job not found')
+
+    @app.get('/api/ci/outreach')
+    def outreach(owner=Depends(require_owner)):
+        with store_factory(dsn) as catalog:
+            return {'drafts':catalog.list_outreach(owner)}
+
+    @app.get('/api/ci/operations')
+    def operations(owner=Depends(require_owner)):
+        with store_factory(dsn) as catalog:
+            return {'states':catalog.operations()}
 
     return app
