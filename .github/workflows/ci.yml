@@ -40,8 +40,10 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install worker and PostgreSQL test driver
-        run: python -m pip install -e 'services/worker[test]' 'psycopg[binary]>=3,<4'
+        run: python -m pip install -e 'services/worker[test,agents]'
       - name: Apply migrations to disposable database
         run: python -m pytest services/worker/tests/integration/test_postgres_migrations.py -v
       - name: Exercise PostgreSQL worker ledger
         run: python -m pytest services/worker/tests/system/test_postgres_ledger.py -v
+      - name: Exercise six-role LangGraph routing and checkpoints
+        run: python -m pytest services/worker/tests/integration/test_langgraph_runtime.py -v
