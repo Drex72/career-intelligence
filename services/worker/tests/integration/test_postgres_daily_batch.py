@@ -21,7 +21,8 @@ def test_daily_batch_only_delivers_verified_evidence_once():
         conn.execute(
             """insert into ci_eligibility_assessments(job_id,status,confidence,reasons,contradictions,policy_version)
                values(%s,'verified_eligible',0.95,'[]'::jsonb,'[]'::jsonb,'human-reviewed-v1')""",(open_id,))
-        assert conn.execute("select ci_generate_daily_batch(%s,%s,100)",(owner,today)).fetchone()[0]==0
+        conn.execute("select ci_generate_daily_batch(%s,%s,100)",(owner,today))
+        assert conn.execute("select count(*) from ci_delivered_companies where owner_user_id=%s and company_id=%s",(owner,cid)).fetchone()[0]==0
         conn.execute(
             """insert into ci_eligibility_evidence(job_id,source_url,source_kind,excerpt,excerpt_hash,scope,claim,confidence)
                values(%s,%s,'official_job','Applicants residing in Nigeria are eligible',%s,'job','Nigeria eligible','verified')""",
@@ -29,8 +30,8 @@ def test_daily_batch_only_delivers_verified_evidence_once():
         assert conn.execute("select ci_generate_daily_batch(%s,%s,100)",(owner,today)).fetchone()[0]==1
         assert conn.execute("select ci_generate_daily_batch(%s,%s,100)",(owner,today)).fetchone()[0]==0
         assert conn.execute("select ci_generate_daily_batch(%s,%s,100)",(owner,today+timedelta(days=1))).fetchone()[0]==0
-        assert conn.execute("select count(*) from ci_delivered_companies where owner_user_id=%s",(owner,)).fetchone()[0]==1
-        assert conn.execute("select count(*) from ci_daily_batch_items i join ci_daily_batches b on b.id=i.batch_id where b.owner_user_id=%s",(owner,)).fetchone()[0]==1
+        assert conn.execute("select count(*) from ci_delivered_companies where owner_user_id=%s and company_id=%s",(owner,cid)).fetchone()[0]==1
+        assert conn.execute("select count(*) from ci_daily_batch_items i join ci_daily_batches b on b.id=i.batch_id where b.owner_user_id=%s and i.job_id=%s",(owner,open_id)).fetchone()[0]==1
 
 @pytest.mark.skipif(not os.environ.get('PG_TEST_DSN'), reason='isolated PostgreSQL required')
 def test_batch_function_is_not_callable_by_browser_roles():
