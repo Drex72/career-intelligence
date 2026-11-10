@@ -1,0 +1,33 @@
+name: UI dependency lock sync (temporary)
+on:
+  push:
+    branches: [design/light-workspace-refresh]
+    paths:
+      - 'apps/web/package.json'
+      - '.github/workflows/ci-ui-deps-sync.yml'
+permissions:
+  contents: write
+jobs:
+  sync-lock:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          ref: design/light-workspace-refresh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate exact npm dependency lockfile
+        working-directory: apps/web
+        run: npm install --package-lock-only --no-audit --no-fund
+      - name: Commit generated lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(ui): sync pinned package lockfile"
+            git push origin HEAD:design/light-workspace-refresh
+          fi
