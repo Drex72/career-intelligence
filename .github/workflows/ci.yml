@@ -53,6 +53,8 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_postgres_daily_batch.py -v
       - name: Verify private ATS ingestion and eligibility-review queue
         run: python -m pytest services/worker/tests/integration/test_postgres_ats.py -v
+      - name: Verify official ATS link candidates are safe, scoped and review-only
+        run: python -m pytest services/worker/tests/integration/test_postgres_official_ats_candidates.py -v
       - name: Verify official ATS eligibility decisions and private evidence audit
         run: python -m pytest services/worker/tests/integration/test_postgres_official_review.py -v
       - name: Verify untrusted ATS candidate review and safe promotion
