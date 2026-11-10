@@ -48,7 +48,7 @@ export default function Login(){
     }catch(err){setError(err instanceof Error?err.message:'Unable to sign in');}
     finally{setLoading(false);}
   }
-  return <main className="login-screen"><div className="login-card">
+  return <main className="login-screen"><div className="login-layout"><aside className="login-story"><div className="story-wordmark"><span className="story-mark">CI</span><span>Career Intelligence</span></div><div className="story-main"><p className="story-label">A MORE INTENTIONAL JOB SEARCH</p><h2>Make your next move with clarity.</h2><p>Research opportunities, understand who can hire you, and keep every application and conversation in one thoughtful workspace.</p></div><div className="story-footer"><span className="story-footer-dot" aria-hidden="true"/>Evidence before assumptions. You stay in control.</div></aside><div className="login-card">
     <div className="logo-large">CI<span>✦</span></div><p className="eyebrow">PRIVATE WORKSPACE</p>
     <h1>Career Intelligence</h1><p className="muted">Sign in with your authorized Groundwork Supabase account.</p>
     <form onSubmit={submit} className="login-form">
@@ -59,5 +59,5 @@ export default function Login(){
     </form>
     <button type="button" className="outline-button" disabled={loading} onClick={signInGoogle}>Continue with Google</button>
     <small className="muted">Google sign-in uses the same owner-only access checks · No public registrations · No automatic email sending</small>
-  </div></main>;
+  </div></div></main>;
 }
