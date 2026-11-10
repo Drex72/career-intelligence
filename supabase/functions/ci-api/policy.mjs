@@ -14,6 +14,7 @@ export function route(url, method) {
   if (method === 'GET' && /^batches\/\d{4}-\d{2}-\d{2}$/.test(path)) return {type:'batch',day:path.slice(8)};
   if (method === 'POST' && path === 'sources') return {type:'registerSource'};
   if (method === 'POST' && path === 'sources/scan') return {type:'scanSource'};
+  if (method === 'POST' && path === 'eligibility/review') return {type:'reviewEligibility'};
   if (method === 'POST' && path === 'discover') return {type:'discover'};
   if (method === 'POST' && path === 'batches/generate') return {type:'generateBatch'};
   if (method === 'POST' && path === 'applications') return {type:'application'};
