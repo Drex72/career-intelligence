@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'supabase/functions/ci-api/**'
+      - 'supabase/functions/ci-worker/**'
       - 'supabase/migrations/0010_workspace_owners.sql'
       - '.github/workflows/ci-edge.yml'
   pull_request:
@@ -22,4 +23,4 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
-      - run: node --test supabase/functions/ci-api/*.test.mjs
+      - run: node --test supabase/functions/ci-api/*.test.mjs supabase/functions/ci-worker/*.test.mjs
