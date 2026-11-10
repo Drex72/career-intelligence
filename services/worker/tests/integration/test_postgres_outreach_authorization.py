@@ -103,3 +103,35 @@ def test_browser_roles_cannot_call_authorization_functions():
                               "ci_approve_outreach_draft(uuid,uuid,text)",
                               "ci_prepare_outreach_intent(uuid,uuid)"):
                 assert db.execute("select has_function_privilege(%s,%s,'EXECUTE')",(role,signature)).fetchone()[0] is False
+
+
+def test_owner_revocation_cancels_pending_only_and_preserves_ambiguous_status():
+    import psycopg
+    with psycopg.connect(os.environ["PG_TEST_DSN"],autocommit=True) as db:
+        owner,draft,_,_,_=setup_draft(db)
+        assert db.execute("select ci_revoke_outreach_approval(%s,%s)",(uuid4(),draft)).fetchone()[0]=="not_found"
+        assert db.execute("select ci_approve_outreach_draft(%s,%s,'manual')",(owner,draft)).fetchone()[0] is True
+        intent=db.execute("select ci_prepare_outreach_intent(%s,%s)",(owner,draft)).fetchone()[0]
+        assert intent
+        assert db.execute("select ci_revoke_outreach_approval(%s,%s)",(owner,draft)).fetchone()[0]=="revoked"
+        assert db.execute("select status from ci_outbound_messages where id=%s",(intent,)).fetchone()[0]=="cancelled"
+        assert db.execute("select status from ci_outreach_drafts where id=%s",(draft,)).fetchone()[0]=="cancelled"
+        assert db.execute("select ci_prepare_outreach_intent(%s,%s)",(owner,draft)).fetchone()[0] is None
+        assert db.execute("select count(*) from ci_outreach_approvals where draft_id=%s and revoked_at is null",(draft,)).fetchone()[0]==0
+
+        owner2,draft2,_,_,_=setup_draft(db)
+        assert db.execute("select ci_approve_outreach_draft(%s,%s,'manual')",(owner2,draft2)).fetchone()[0] is True
+        intent2=db.execute("select ci_prepare_outreach_intent(%s,%s)",(owner2,draft2)).fetchone()[0]
+        db.execute("update ci_outbound_messages set status='sending_unknown' where id=%s",(intent2,))
+        assert db.execute("select ci_revoke_outreach_approval(%s,%s)",(owner2,draft2)).fetchone()[0]=="reconciliation_required"
+        assert db.execute("select status from ci_outbound_messages where id=%s",(intent2,)).fetchone()[0]=="sending_unknown"
+        assert db.execute("select ci_prepare_outreach_intent(%s,%s)",(owner2,draft2)).fetchone()[0] is None
+
+
+def test_browser_roles_cannot_revoke_other_users_approvals():
+    import psycopg
+    with psycopg.connect(os.environ["PG_TEST_DSN"]) as db:
+        for role in ("anon","authenticated"):
+            assert db.execute(
+                "select has_function_privilege(%s,'ci_revoke_outreach_approval(uuid,uuid)','EXECUTE')",
+                (role,)).fetchone()[0] is False
