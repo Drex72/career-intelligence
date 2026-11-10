@@ -40,6 +40,23 @@ jobs:
           token: ${{ secrets.CI_KNOWLEDGE_TOKEN }}
           path: approved-vault
           persist-credentials: false
+      - name: Verify GitHub vault repository is private
+        if: steps.gate.outputs.enabled == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.CI_KNOWLEDGE_TOKEN }}
+          EXPECTED_REPO: ${{ vars.CI_KNOWLEDGE_REPO }}
+        run: |
+          set -euo pipefail
+          IS_PRIVATE="$(gh api "repos/$EXPECTED_REPO" --jq '.private')"
+          if [[ "$IS_PRIVATE" != "true" ]]; then
+            echo 'Refusing to index notes from a non-private or inaccessible repository.'
+            exit 1
+          fi
+          if [[ ! -d approved-vault/.git && ! -f approved-vault/.git ]]; then
+            echo 'Expected a checked-out private Git repository.'
+            exit 1
+          fi
       - uses: actions/setup-python@v5
         if: steps.gate.outputs.enabled == 'true'
         with:
@@ -48,6 +65,11 @@ jobs:
         if: steps.gate.outputs.enabled == 'true'
         working-directory: application
         run: python -m pip install -e 'services/worker[agents]'
+      - name: Validate approved vault notes (no database writes)
+        if: steps.gate.outputs.enabled == 'true'
+        working-directory: application
+        run: python -m career.cli pg-vault-sync ../approved-vault --dry-run
+
       - name: Index approved Obsidian notes with exact Git revision
         if: steps.gate.outputs.enabled == 'true'
         working-directory: application
