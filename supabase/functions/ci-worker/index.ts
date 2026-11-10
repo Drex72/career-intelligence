@@ -123,8 +123,20 @@ Deno.serve(async (request:Request)=>{
               p_application_link:job.applicationLink,p_published_at:job.publishedAt,
               p_locations:job.locations
             });
-            if(saved.error||!saved.data)report.failures++;
-            else report.himalayas++;
+            if(saved.error||!saved.data){report.failures++;continue;}
+            report.himalayas++;
+            // An official ATS application link is a proposal, not verified employer identity.
+            // The user must approve it in the source-candidate queue before scanning.
+            if(report.candidates<10){
+              for(const candidate of candidateBoards(job.applicationLink,job.company,job.guid)){
+                const proposed=await db.rpc('ci_suggest_ats_board',{
+                  p_provider:candidate.provider,p_board_slug:candidate.slug,
+                  p_company_name:candidate.company,p_evidence_url:candidate.evidenceURL
+                });
+                if(!proposed.error&&proposed.data)report.candidates++;
+                if(report.candidates>=10)break;
+              }
+            }
           }
           if(!Array.isArray(page?.jobs)||page.jobs.length<20)break;
         }catch{report.failures++;break;}
