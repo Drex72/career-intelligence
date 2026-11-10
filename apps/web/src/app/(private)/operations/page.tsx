@@ -5,6 +5,8 @@ import {useResource} from '@/components/useResource';
 import {useCareerSession} from '@/components/AuthGate';
 import {ciFetch} from '@/lib/api';
 import {StateNotice} from '@/components/ResourceTable';
+import {WorkflowStateChart} from '@/components/AnalyticsCharts';
+import {Badge,Button,Card} from '@radix-ui/themes';
 
 type WorkerRun={started_at:string,finished_at:string|null,state:string,details:Record<string,number>};
 type Operations={states:Record<string,number>,delivery?:{date:string,state:string,delivered:number,target:number}|null,workerRuns?:WorkerRun[]};
@@ -79,9 +81,7 @@ export default function Operations(){
   return <>
     <PageHeading meta="SYSTEM / OPERATIONS" title="Agent operations" description="Review source discovery, eligibility research, and scheduled work using real system activity." action={<button className="button-secondary" type="button" onClick={()=>{tasks.reload();sources.reload();review.reload();candidates.reload();}}>Refresh activity</button>}/>
     <StateNotice loading={tasks.loading} error={tasks.error}/>
-    <section className="metric-grid">{Object.entries(tasks.data?.states||{}).map(([state,count])=><div className="metric" key={state}>
-      <span>{state.replace(/_/g,' ')}</span><strong>{count}</strong></div>)}</section>
-    {tasks.data&&Object.keys(tasks.data.states).length===0&&<div className="empty-state">No PostgreSQL workflow tasks have been created yet.</div>}
+    {tasks.data&&<WorkflowStateChart states={tasks.data.states}/>}
     <div className="operations-overview-grid"><section className="workspace-surface">
       <div className="section-title"><div><h2>Daily recommendations</h2>
         <p className="muted">Automatic batch assembly is scheduled for 07:00 Lagos time. Only verified-eligible jobs with source evidence can be delivered.</p>
@@ -94,7 +94,7 @@ export default function Operations(){
       <div className="section-title"><div><h2>Unattended discovery worker</h2>
         <p className="muted">Authenticated scheduled runs. Public-source research and eligibility checks only; no emails or simulated metrics.</p></div></div>
       {(tasks.data?.workerRuns||[]).map((run,i)=><div className="section-title" key={i}>
-        <div><strong>{run.state}</strong><p className="muted">{new Date(run.started_at).toLocaleString()}</p></div>
+        <div><Badge variant="soft" color={run.state==="completed"?"green":run.state==="failed"?"red":"violet"}>{run.state}</Badge><p className="muted">{new Date(run.started_at).toLocaleString()}</p></div>
         <p className="muted">Remotive jobs {run.details?.remotive??0} · Himalayas jobs {run.details?.himalayas??0} · ATS jobs {run.details?.ats_jobs??0} · Reviews {run.details?.reviewed??0} · Matches {run.details?.matched??0} · Source candidates {run.details?.candidates??0} · Failures {run.details?.failures??0}</p>
       </div>)}
       {tasks.data?.workerRuns?.length===0&&<p className="muted">No scheduled worker runs recorded yet.</p>}
