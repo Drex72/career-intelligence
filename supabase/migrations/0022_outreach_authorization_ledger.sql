@@ -7,7 +7,7 @@ create unique index if not exists ci_one_active_approval_per_draft
 create or replace function ci_outreach_draft_ready(
   p_owner uuid,p_draft uuid
 ) returns boolean
-language plpgsql security invoker set search_path=public,extensions as $ready$
+language plpgsql security invoker set search_path=public as $ready$
 declare v_email text;
 begin
   if p_owner is null or p_draft is null or
@@ -47,7 +47,7 @@ begin
   if exists (
     select 1 from ci_suppression_records s
     where s.owner_user_id=p_owner
-      and s.normalized_contact_hash=encode(extensions.digest(v_email,'sha256'),'hex')
+      and s.normalized_contact_hash=encode(sha256(convert_to(v_email,'utf8')),'hex')
   ) then return false; end if;
   return true;
 end;
@@ -56,7 +56,7 @@ $ready$;
 create or replace function ci_approve_outreach_draft(
   p_owner uuid,p_draft uuid,p_mode text default 'manual'
 ) returns boolean
-language plpgsql security invoker set search_path=public,extensions as $approve$
+language plpgsql security invoker set search_path=public as $approve$
 declare v_draft ci_outreach_drafts%rowtype; v_auto boolean;
 begin
   if p_mode not in ('manual','standing') or p_owner is null or p_draft is null
@@ -81,7 +81,7 @@ $approve$;
 create or replace function ci_prepare_outreach_intent(
   p_owner uuid,p_draft uuid
 ) returns uuid
-language plpgsql security invoker set search_path=public,extensions as $intent$
+language plpgsql security invoker set search_path=public as $intent$
 declare v_draft ci_outreach_drafts%rowtype; v_policy ci_outreach_policies%rowtype;
         v_approval ci_outreach_approvals%rowtype; v_id uuid; v_key text;
         v_daily int; v_company_daily int;
