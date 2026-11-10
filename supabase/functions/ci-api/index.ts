@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.119.0';
 import {route,isUuid,validApplication,validDraft,validReply,classifyReply,roleRestricted} from './policy.mjs';
 import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription} from './eligibility.mjs';
+import {classifyWorkFacts} from './work-facts.mjs';
 import {candidateBoards} from './candidates.mjs';
 import {currentEligibility,visibleMatchScore,currentApprovedRevision} from './decision.mjs';
 
@@ -419,6 +420,16 @@ Deno.serve(async (request:Request)=>{
         p_excerpt:decision.excerpt,p_reason:decision.reason
       }));
       if(!recorded)return reply(409,{error:'Current verified assessment already exists or evidence was invalid'});
+      // The second write is limited to the exact official evidence excerpt just stored.
+      const facts=classifyWorkFacts(decision.excerpt);
+      if(decision.excerpt && (facts.workMode!=='unknown'||facts.sponsorship!=='unknown')){
+        const savedFacts=await db.rpc('ci_record_ats_work_facts',{
+          p_job_id:body.job_id,p_source_url:match.sourceURL,p_excerpt:decision.excerpt,
+          p_work_mode:facts.workMode,p_sponsorship:facts.sponsorship
+        });
+        if(savedFacts.error||!savedFacts.data)
+          return reply(503,{error:'Official review saved but work arrangement could not be recorded; retry only after reviewing evidence state'});
+      }
       return reply(200,{job_id:body.job_id,status:decision.status,confidence:decision.confidence,
         reason:decision.reason,
         note:'Only explicit official role-level evidence can verify Nigerian hiring eligibility. Worldwide remote wording is not sufficient.'});
