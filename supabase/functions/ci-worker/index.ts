@@ -94,6 +94,8 @@ Deno.serve(async (request:Request)=>{
     const run=checked(await db.from('ci_worker_runs')
       .insert({state:'running'}).select('id').single());
     runID=run.id;
+    await recordStage('sources','signed_ci_worker','run_started',
+      {format:'signed_worker_request'},{status:'running'});
     // One feed request per six hours, matching provider's published guidance.
     const allowed=checked(await db.rpc('ci_claim_feed_slot',{p_action:'remotive'}));
     if(allowed){
@@ -318,6 +320,11 @@ Deno.serve(async (request:Request)=>{
         }
       }
     }
+    await recordStage('sources','signed_ci_worker','run_finished',
+      {format:'worker_summary'},
+      {status:report.failures?'partial':'completed',
+       processed:report.ats_jobs+report.remotive+report.himalayas,
+       reviews:report.reviewed,failures:report.failures});
     checked(await db.from('ci_worker_runs').update({
       finished_at:new Date().toISOString(),
       state:report.failures?'partial':'completed',details:report

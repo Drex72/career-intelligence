@@ -126,7 +126,7 @@ export default function FactoryFlow(){
    if(view==='replay'&&replayPlaying&&replayEvent)setSelectedStage(replayEvent.stage);
  },[view,replayPlaying,replayEvent?.id]);
  const instrumentedRecent=useMemo(()=>events.filter(e=>
-   e.kind==='instrumented'&&Date.now()-Date.parse(e.time)<120000&&Date.now()>=Date.parse(e.time)-5000
+   e.kind==='instrumented'&&!['run_started','run_finished'].includes(e.type)&&Date.now()-Date.parse(e.time)<120000&&Date.now()>=Date.parse(e.time)-5000
  ),[events]);
  const liveRun=flow.data?.runs.some(r=>r.state==='running'&&!r.finished_at&&Date.now()-Date.parse(r.started_at)<900000)??false;
  const recentStages=new Set(instrumentedRecent.map(e=>e.stage));
