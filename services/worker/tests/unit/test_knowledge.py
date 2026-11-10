@@ -19,10 +19,10 @@ def test_deletion_detected():
     assert diff_revision({'x.md':'abc','y.md':'def'},{'x.md':'abc'}) == {'changed': set(), 'removed': {'y.md'}}
 
 def test_malformed_approval_and_scope_are_rejected():
-    content='---\\nstatus: approved\\nstatus: pending\\nvisibility: outreach-safe\\n---\\nPrivate'
+    content='---\nstatus: approved\nstatus: pending\nvisibility: outreach-safe\n---\nPrivate'
     assert parse_note('01-experience/work.md',content) is None
-    assert parse_note('01-experience/work.md','---\\nstatus: approved\\nvisibility: private\\n---\\nPrivate') is None
-    assert parse_note('01-experience/work.md','---\\nstatus: approved\\nvisibility: outreach-safe\\n---\\n') is None
+    assert parse_note('01-experience/work.md','---\nstatus: approved\nvisibility: private\n---\nPrivate') is None
+    assert parse_note('01-experience/work.md','---\nstatus: approved\nvisibility: outreach-safe\n---\n') is None
 
 
 def test_nested_private_notes_and_hidden_directories_never_index():
@@ -37,8 +37,8 @@ def test_vault_scan_ignores_symlinks_and_unapproved_files(tmp_path):
     folder=tmp_path/'01-experience'
     folder.mkdir()
     file=folder/'work.md'
-    file.write_text('---\\nstatus: approved\\nvisibility: matching-safe\\n---\\nPython and distributed systems')
-    (folder/'draft.md').write_text('---\\nstatus: pending\\nvisibility: agents-safe\\n---\\nPrivate')
+    file.write_text('---\nstatus: approved\nvisibility: matching-safe\n---\nPython and distributed systems')
+    (folder/'draft.md').write_text('---\nstatus: pending\nvisibility: agents-safe\n---\nPrivate')
     (folder/'copy.md').symlink_to(file)
     accepted,skipped=scan_approved_vault(tmp_path)
     assert list(accepted)==['01-experience/work.md']
@@ -50,6 +50,6 @@ def test_scan_fails_closed_on_oversized_notes(tmp_path):
     from career.knowledge.vault import scan_approved_vault,MAX_NOTE_BYTES
     folder=tmp_path/'00-profile'
     folder.mkdir()
-    (folder/'work.md').write_text('---\\nstatus: approved\\nvisibility: agents-safe\\n---\\n'+'x'*(MAX_NOTE_BYTES+1))
+    (folder/'work.md').write_text('---\nstatus: approved\nvisibility: agents-safe\n---\n'+'x'*(MAX_NOTE_BYTES+1))
     with pytest.raises(ValueError,match='oversized'):
         scan_approved_vault(tmp_path)
