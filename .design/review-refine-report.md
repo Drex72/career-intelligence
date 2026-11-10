@@ -45,3 +45,23 @@ Review scope: authenticated workspace (eight routes), sign-in, navigation, share
 
 ## Scope boundary
 This work touches UI files and design documentation only. No API implementation, Supabase authorization policy, worker, migration, or delivery logic is changed.
+
+## Follow-up remediation — November 10, 2026
+
+An additional source-level review and GitHub CI pass identified and addressed:
+
+- **Mobile navigation discoverability:** the original horizontally scrollable link row hid navigation choices. A labelled expand/collapse menu now presents all eight destinations, has a clear active state, and supports Escape-to-close with button focus restoration.
+- **Evidence panel race:** rapid selection of different jobs could render the earlier request's data in the currently selected panel. Each request is now sequence-guarded; closing invalidates in-flight results and restores focus to the evidence trigger.
+- **Filter completeness:** exposed an explicit Ineligible category and conservatively assigns all unknown/pending statuses to Needs verification, without upgrading them to eligible. Added four Node regression tests for categorization and search behavior.
+- **Type safety regression:** new JavaScript filter initially caused unknown inferred row types (GitHub web job failed at commit 282a0a95). Fixed in commit a9172efd; GitHub CI run 42839861073 completed successfully.
+- **Small-text contrast:** measured lighter small-text colors and increased contrast of labels, hints, table headings, placeholder and navigation text.
+- **Missing external URLs:** link actions now render unavailable text instead of broken or unsafe-protocol destinations.
+- **Application setup:** exposes loading, failure, and empty-discovery states; does not let an unavailable job list submit.
+- **Recoverability:** shared request failure notice now supports a user-triggered Try again action, wired to Overview, Opportunities, Applications, and People.
+
+### Verified versus still outstanding
+
+- Verified through GitHub Actions on commit a9172efd (run 42839861073): Node tests (including eligibility filters), TypeScript typecheck and Next.js build.
+- Later recovery-action and stylesheet commits require successful final-head GitHub CI before merge. Do not infer success from earlier commits.
+- No authenticated browser screenshot capture or real keyboard/screen-reader walkthrough could be performed in this session. Vercel's preview build rate limit remains an external deployment constraint. This is a documented **remaining QA gate**, not a confirmed defect fixed by code review.
+- Changes must remain unmerged until those final gates and concurrent infrastructure compatibility are checked.
