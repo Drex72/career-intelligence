@@ -1,5 +1,5 @@
 /** Pure routing and validation helpers shared by Node tests and the Edge runtime. */
-export const readRoutes = new Set(['metrics', 'jobs', 'people', 'applications', 'knowledge', 'outreach', 'conversations', 'operations','sources','eligibility-queue','source-candidates']);
+export const readRoutes = new Set(['metrics', 'jobs', 'people', 'applications', 'knowledge', 'outreach', 'conversations', 'operations','sources','eligibility-queue','source-candidates','preferences']);
 export const statuses = new Set(['discovered', 'saved', 'applied', 'interviewing', 'offer', 'rejected', 'withdrawn']);
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const isUuid = (value) => typeof value === 'string' && uuid.test(value);
@@ -16,6 +16,7 @@ export function route(url, method) {
   if (method === 'POST' && path === 'source-candidates/decision') return {type:'decideCandidate'};
   if (method === 'POST' && path === 'sources/scan') return {type:'scanSource'};
   if (method === 'POST' && path === 'eligibility/review') return {type:'reviewEligibility'};
+  if (method === 'POST' && path === 'preferences') return {type:'savePreferences'};
   if (method === 'POST' && path === 'discover') return {type:'discover'};
   if (method === 'POST' && path === 'batches/generate') return {type:'generateBatch'};
   if (method === 'POST' && path === 'applications') return {type:'application'};
