@@ -94,7 +94,19 @@ Deno.serve(async (request:Request)=>{
       if(path==='operations'){
         const states=list(check(await db.from('ci_workflow_tasks').select('state').limit(1000)));
         const counts:Record<string,number>={};for(const row of states)counts[row.state]=(counts[row.state]??0)+1;
-        return reply(200,{states:counts});
+        const batches=list(check(await db.from('ci_daily_batches')
+          .select('id,local_date,state,generated_at,target')
+          .eq('owner_user_id',owner).order('local_date',{ascending:false}).limit(1)));
+        let delivery=null;
+        if(batches.length){
+          const batch=batches[0];
+          const items=await db.from('ci_daily_batch_items')
+            .select('id',{head:true,count:'exact'}).eq('batch_id',batch.id);
+          if(items.error)throw new Error('batch item count failed');
+          delivery={date:batch.local_date,state:batch.state,
+            delivered:items.count??0,target:batch.target};
+        }
+        return reply(200,{states:counts,delivery});
       }
     }
     if(operation.type==='batch'){
