@@ -107,19 +107,24 @@ Deno.serve(async (request:Request)=>{
         const sourceRows=feed.jobs.slice(0,100);
         report.received+=sourceRows.length;
         let remotiveNormalized=0;
+        const remotiveExamples=[];
         for(const job of sourceRows){
           // Match the current role rule separately so the user can see why titles were skipped.
           const roleOK=isSoftwareRole(job?.title);
           const entry=remotiveRole(job,now());
           if(!entry){
             report.filtered++;
-            if(!roleOK)report.rejected_role++;
+            let reason='source';
+            if(!roleOK)reason='role';
             else {
               const published=String(job?.publication_date||'');
               const stamp=Date.parse(/(?:Z|[+-]\d\d:\d\d)$/.test(published)?published:published+'Z');
-              if(!Number.isFinite(stamp)||stamp<now()-7*86400_000||stamp>now()+86400_000)report.rejected_stale++;
-              else report.rejected_source++;
+              if(!Number.isFinite(stamp)||stamp<now()-7*86400_000||stamp>now()+86400_000)reason='stale';
             }
+            if(reason==='role')report.rejected_role++;
+            else if(reason==='stale')report.rejected_stale++;
+            else report.rejected_source++;
+            if(remotiveExamples.length<3)remotiveExamples.push({reason,title:String(job?.title||'').slice(0,180)});
             continue;
           }
           report.normalized++;remotiveNormalized++;
@@ -140,6 +145,9 @@ Deno.serve(async (request:Request)=>{
             }
           }
         }
+        for(const example of remotiveExamples)await recordStage('sources','remotive_filter','posting_filtered',
+          {provider:'remotive',title:example.title,format:'remote_feed'},
+          {reason:example.reason,status:'rejected'});
         await recordStage('sources','remotive_feed','source_screened',
           {provider:'remotive',format:'remote_feed',received:sourceRows.length},
           {accepted:remotiveNormalized,ingested:report.remotive,rejected:sourceRows.length-remotiveNormalized,
@@ -188,6 +196,9 @@ Deno.serve(async (request:Request)=>{
               }
             }
           }
+          for(const example of audit.samples)await recordStage('sources','himalayas_filter','posting_filtered',
+            {provider:'himalayas',title:example.title,format:'remote_feed'},
+            {reason:example.reason,status:'rejected'});
           await recordStage('sources','himalayas_feed','source_screened',
             {provider:'himalayas',format:'remote_feed',received:audit.scanned},
             {accepted:jobs.length,ingested:report.himalayas-priorIngested,
@@ -253,8 +264,11 @@ Deno.serve(async (request:Request)=>{
               typeof saved.data==='string'?saved.data:undefined);
           }else{report.failures++;report.save_failures++;}
         }
+        for(const example of audit.samples)await recordStage('ingestion','ats_filter','posting_filtered',
+          {provider:cfg.provider,board:cfg.slug,title:example.title,format:'provider_posting'},
+          {reason:example.reason,status:'rejected'});
         await recordStage('ingestion','ats_normalizer','source_screened',
-          {provider:cfg.provider,board:cfg.slug,format:'provider_posting',received:audit.scanned},
+          {provider:cfg.provider,board:cfg.slug,company:cfg.company_name,format:'provider_posting',received:audit.scanned},
           {accepted:candidates.length,ingested:report.ats_jobs-priorIngested,
            rejected:audit.scanned-candidates.length,rejected_role:audit.excluded.role,
            rejected_source:audit.excluded.source,rejected_stale:audit.excluded.stale,
