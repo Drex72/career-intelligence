@@ -79,3 +79,17 @@ def test_private_specialist_pool_and_role_signing_cannot_be_called_by_web_roles(
               'ci_specialist_pool_plan()'):
                 assert not db.execute('select has_function_privilege(%s,%s,%s)',
                                       (role,signature,'EXECUTE')).fetchone()[0]
+
+@pytest.mark.skipif(not os.getenv('PG_TEST_DSN'),reason='isolated PostgreSQL required')
+def test_idle_specialist_canary_does_not_corrupt_measured_throughput():
+    import psycopg
+    with psycopg.connect(os.environ['PG_TEST_DSN']) as db:
+        before=db.execute('select ci_specialist_pool_plan()').fetchone()[0]
+        lane=lambda p:next(x for x in p['roles'] if x['role']=='discovery')
+        normal=lane(before)['throughput_per_run']
+        db.execute("""insert into ci_worker_runs(
+            specialist_role,state,finished_at,details)
+            values('discovery','completed',now(),'{"boards_scanned":0}'::jsonb)""")
+        after=db.execute('select ci_specialist_pool_plan()').fetchone()[0]
+        assert lane(after)['throughput_per_run']==normal
+        db.rollback()
