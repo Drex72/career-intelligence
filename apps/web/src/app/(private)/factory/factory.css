@@ -348,3 +348,15 @@
 .factory-records button:focus-visible{outline:2px solid #347da9;outline-offset:2px}
 @media(max-width:900px){.factory-v2-record-drawer{width:min(780px,100vw)}}
 @media(max-width:600px){.factory-raw-grid{grid-template-columns:1fr}.factory-field-table{min-width:620px}.factory-v2-record-drawer-scroll{padding:11px 12px 25px}}
+
+.factory-v2-compact-events{min-width:0;border-top:1px solid #dce8ee;padding-top:10px;display:grid;gap:4px}
+.factory-v2-compact-events-head{display:flex;justify-content:space-between;gap:6px;align-items:center;margin-bottom:4px}
+.factory-v2-compact-events-head span:first-child{font-size:10px;font-weight:750;color:#3e6178}
+.factory-v2-compact-events-head span:last-child{font-size:9px;color:#839aaa;white-space:nowrap}
+.factory-v2-compact-events>button{width:100%;display:flex;align-items:center;gap:7px;border:1px solid #e3eaf0;background:#fff;padding:7px 8px;border-radius:7px;text-align:left;min-width:0}
+.factory-v2-compact-events>button:hover{background:#eaf5fb;border-color:#b9d7e8}
+.factory-v2-compact-event-dot{height:7px;width:7px;flex:0 0 7px;border-radius:50%;background:#9aabba}
+.factory-v2-compact-event-dot.instrumented{background:#29b58c}
+.factory-v2-compact-event-title{font-size:10px;color:#2f536d;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.factory-v2-compact-event-time{font-size:9px;color:#8aa0ad;white-space:nowrap}
+.factory-v2-compact-events>p{font-size:10px;color:#8b9eac;padding:6px 2px}
