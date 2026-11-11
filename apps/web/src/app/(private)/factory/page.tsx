@@ -155,7 +155,7 @@ export default function DiscoveryMonitor(){
           </div>)}
          </div>}
       </div>}
-     </div>)}</div>:<div className="disc-empty">{hasFunnel?'No per-source data is available yet. The worker may be waiting on provider rate limits.':'Source-level breakdown was not collected for this run.'}</div>}
+     </div>)}</div>:<div className="disc-empty">{hasFunnel&&received===0?'This worker run inspected no postings. Approved feeds or ATS boards may still be within their rate-limit cooldown.':hasFunnel?'The run has counts, but its source-level events are missing from the recent trace window.':'Older runs did not capture per-source screening details.'}</div>}
    </section>
   </div>
   <section className="disc-panel disc-results" aria-labelledby="disc-results-title">
