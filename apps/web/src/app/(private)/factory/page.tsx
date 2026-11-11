@@ -222,7 +222,7 @@ export default function FactoryFlow(){
       const role=ROLES.find(r=>r.node===n.id);
       const running=role&&flow.data?.roles.find(r=>r.role===role.name)?.active;
       return <button key={n.id} type="button" className={'factory-v2-node '+(selectedStage===n.id?'selected ':'')+(active?'pulsing ':'')+(running?'running':'')}
-        style={{left:n.x,top:n.y,width:NODE_WIDTH,height:NODE_HEIGHT}} aria-pressed={selectedStage===n.id} aria-label={"Inspect "+n.name+": "+n.transform} data-tooltip={n.transform} onClick={()=>chooseStage(n.id)}>
+        style={{left:n.x,top:n.y,width:NODE_WIDTH,height:NODE_HEIGHT}} aria-pressed={selectedStage===n.id} aria-label={"Inspect "+n.name+": "+n.transform} data-tooltip={n.transform} data-lane={n.y>350?"bottom":"top"} onClick={()=>chooseStage(n.id)}>
         <span className="factory-v2-node-top"><span className={'factory-v2-node-icon kind-'+n.kind}><StationIcon kind={n.kind}/></span><span className="factory-v2-node-status"><i className={running?'active':active?'recent':''}/>{running?'Running':active?(view==='replay'?'Replay':'Observed'):'Idle'}</span></span>
         <strong>{n.name}</strong><small>{n.agent}</small>
         <span className="factory-v2-node-bottom"><span>{n.id==='registry'?'Sources':n.id==='eligibility'?'Assessments':n.id==='knowledge'?'Notes':n.id==='delivery'?'Delivered':'Records'}</span><b>{nfmt(value)}</b></span>
