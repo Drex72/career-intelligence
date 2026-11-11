@@ -33,6 +33,32 @@ revoke all on sequence ci_specialist_pool_waves_id_seq from public,anon,authenti
 grant select,insert on ci_specialist_pool_waves to service_role;
 grant usage,select on sequence ci_specialist_pool_waves_id_seq to service_role;
 
+-- Parallel outreach workers can see the same eligible contact; a unique
+-- tuple makes draft creation idempotent. This never authorizes a send.
+create unique index if not exists ci_outreach_drafts_owner_job_contact_uq
+  on ci_outreach_drafts(owner_user_id,job_id,contact_id);
+
+-- A crashed people worker must not permanently strand its claimed task.
+create or replace function public.ci_reclaim_expired_people_leases()
+returns integer language plpgsql security invoker set search_path=public as $reclaim_people$
+declare n integer;
+begin
+ update ci_workflow_tasks set
+    state=case when attempt_count>=max_attempts then 'blocked' else 'retry_wait' end,
+    worker_id=null,lease_until=null,
+    next_retry_at=case when attempt_count>=max_attempts then null else now() end,
+    updated_at=now()
+ where task_type='people_research' and state='leased'
+   and lease_until is not null and lease_until<now();
+ get diagnostics n=row_count;
+ return n;
+end;
+$reclaim_people$;
+revoke all on function public.ci_reclaim_expired_people_leases()
+ from public,anon,authenticated;
+grant execute on function public.ci_reclaim_expired_people_leases()
+ to service_role;
+
 -- Stage-bounded HMAC. The role is authenticated, preventing a caller
 -- from changing "discovery" into "outreach" after signing.
 create or replace function public.ci_verify_specialist_request(
@@ -125,7 +151,7 @@ begin
        and (next_retry_at is null or next_retry_at<=now());
    when 'people' then
     select count(*) into due from ci_workflow_tasks
-      where task_type='people_research' and state='pending'
+      where task_type='people_research' and state in ('pending','retry_wait')
        and (next_retry_at is null or next_retry_at<=now());
    when 'outreach' then
     -- Only verified contacts in applications already submitted by the owner;
@@ -184,6 +210,7 @@ declare
 begin
  if not pg_try_advisory_xact_lock(hashtext('ci:specialist-pool')) then
   return jsonb_build_object('decision','controller_busy','launched',0);end if;
+ if not p_dry_run then perform ci_reclaim_expired_people_leases(); end if;
  plan:=ci_specialist_pool_plan();
  if p_dry_run then return plan||jsonb_build_object('dry_run',true,'launched',0); end if;
  select * into cfg from ci_specialist_pool_config where id=1;
