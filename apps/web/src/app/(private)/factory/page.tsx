@@ -67,11 +67,6 @@ export default function DiscoveryMonitor(){
  const runs=resource.data?.runs??[];
  const run=runs.find(x=>x.id===selected)??runs[0];
  const data=run?.details??null;
- const hasFunnel=data&&typeof data.received==='number';
- const received=hasFunnel?data.received!:null;
- const accepted=hasFunnel?data.normalized??null:null;
- const excluded=hasFunnel?data.filtered??null:null;
- const stored=hasFunnel?(data.remotive??0)+(data.himalayas??0)+(data.ats_jobs??0):null;
  const records=useMemo(()=>resource.data?.events.filter(e=>e.kind==='instrumented'&&e.run_id===run?.id)??[],[resource.data?.events,run?.id]);
  const sources=useMemo<Breakdown[]>(()=>records.filter(e=>e.type==='source_screened').map(e=>({
   id:e.id,provider:String(e.input.provider||'ATS'),board:String(e.input.board||''),
@@ -80,12 +75,26 @@ export default function DiscoveryMonitor(){
   source:safeNum(e.output.rejected_source),stale:safeNum(e.output.rejected_stale),
   cap:safeNum(e.output.not_selected),time:e.time
  })),[records]);
- const stageJobs=useMemo(()=>records.filter(e=>e.type==='posting_saved').slice(0,12),[records]);
+ const fullyMeasured=typeof data?.received==='number';
+ const observedSources=sources.length>0;
+ // Signed worker summaries appear on completion. During active runs, sum the
+ // actual source-screened events already emitted, and label them "so far".
+ const observed=(key:keyof Breakdown)=>sources.reduce((n,s)=>n+(typeof s[key]==='number'?s[key] as number:0),0);
+ const hasFunnel=fullyMeasured||observedSources;
+ const received=fullyMeasured?data!.received!:observedSources?observed('received'):null;
+ const accepted=fullyMeasured?data!.normalized??null:observedSources?observed('accepted'):null;
+ const excluded=fullyMeasured?data!.filtered??null:observedSources?observed('rejected'):null;
+ const stored=fullyMeasured?(data!.remotive??0)+(data!.himalayas??0)+(data!.ats_jobs??0):observedSources?observed('ingested'):null;
+ const reasons={
+  role:fullyMeasured?data!.rejected_role??null:observedSources?observed('role'):null,
+  source:fullyMeasured?data!.rejected_source??null:observedSources?observed('source'):null,
+  stale:fullyMeasured?data!.rejected_stale??null:observedSources?observed('stale'):null
+ };
  const running=run?.state==='running';
  const filterReasons=[
-  {key:'role',label:'Not a relevant engineering role',value:hasFunnel?data?.rejected_role??null:null,description:'Job title did not satisfy the software/backend/AI engineering role rules.'},
-  {key:'source',label:'Invalid or untrusted posting details',value:hasFunnel?data?.rejected_source??null:null,description:'Missing or malformed employer, posting identifier, or allowlisted job URL.'},
-  {key:'stale',label:'Outside publication window',value:hasFunnel?data?.rejected_stale??null:null,description:'Published too long ago or dated implausibly into the future.'}
+  {key:'role',label:'Not a relevant engineering role',value:reasons.role,description:'Job title did not satisfy the software/backend/AI engineering role rules.'},
+  {key:'source',label:'Invalid or untrusted posting details',value:reasons.source,description:'Missing or malformed employer, posting identifier, or allowlisted job URL.'},
+  {key:'stale',label:'Outside publication window',value:reasons.stale,description:'Published too long ago or dated implausibly into the future.'}
  ];
  const maxCount=Math.max(1,received??0);
  function openSource(id:string){setExpandedSource(v=>v===id?null:id);}
@@ -93,7 +102,7 @@ export default function DiscoveryMonitor(){
   <PageHeading meta="DISCOVERY / OBSERVE" title="Where did the jobs go?" description="Track one real discovery run, see which postings passed, and understand why others were excluded." action={<div className="disc-top-actions"><button type="button" className="disc-top-button" onClick={()=>setOnboard(true)}>How this works</button><Link className="disc-top-button" href="/factory/advanced">Technical map <span aria-hidden="true">↗</span></Link></div>}/>
   <StateNotice loading={!resource.data&&resource.loading} error={resource.error}/>
   <section className="disc-control" aria-label="Discovery run selector">
-   <div className="disc-control-copy"><div className="disc-pulse" data-state={run?.state||'none'}/><div><strong>{running?'Discovery is running':run?'Latest discovery activity':'No worker runs yet'}</strong><p>{run?'Started '+fullDate(run.started_at)+' · '+run.state.replaceAll('_',' '):'Run history appears after the signed worker executes.'}</p></div></div>
+   <div className="disc-control-copy"><div className="disc-pulse" data-state={run?.state||'none'}/><div><strong>{running?'Discovery is running':run?'Selected discovery activity':'No worker runs yet'}</strong><p>{run?'Started '+fullDate(run.started_at)+' · '+run.state.replaceAll('_',' '):'Run history appears after the signed worker executes.'}</p></div></div>
    <div className="disc-control-actions">
     <label htmlFor="disc-run-select">Run</label><select id="disc-run-select" value={run?.id??''} onChange={e=>{setSelected(e.target.value);setExpandedSource(null);}} disabled={!runs.length}>
      {runs.map((r,i)=><option key={r.id} value={r.id}>{i===0?'Latest · ':''}{fullDate(r.started_at)} · {r.state}</option>)}
@@ -103,7 +112,7 @@ export default function DiscoveryMonitor(){
    </div>
   </section>
   <section className="disc-journey" aria-labelledby="disc-journey-title">
-   <div className="disc-section-heading"><div><h2 id="disc-journey-title">Discovery at a glance</h2><p>Counts are from the selected worker run, not the entire job database.</p></div><span className="disc-label">{hasFunnel?'MEASURED':'HISTORICAL / LIMITED DATA'}</span></div>
+   <div className="disc-section-heading"><div><h2 id="disc-journey-title">Discovery at a glance</h2><p>Counts come from the selected worker run, not the whole database. In-progress runs update as sources finish.</p></div><span className="disc-label">{fullyMeasured?'MEASURED':running&&observedSources?'LIVE · SO FAR':observedSources?'PARTIAL EVENT RECORD':'HISTORICAL / LIMITED DATA'}</span></div>
    <div className="disc-funnel">
     <div className="disc-funnel-step disc-received"><span className="disc-step-icon"><StepIcon name="search"/></span><small>1 · RECEIVED</small><strong>{number(received)}</strong><span>Postings inspected</span></div>
     <span className="disc-funnel-arrow" aria-hidden="true"><StepIcon name="arrow"/></span>
@@ -112,7 +121,8 @@ export default function DiscoveryMonitor(){
     <div className="disc-funnel-step disc-saved"><span className="disc-step-icon"><StepIcon name="check"/></span><small>3 · STORED</small><strong>{number(stored)}</strong><span>Accepted by database</span></div>
    </div>
    <div className="disc-funnel-outcome"><span className="disc-funnel-outcome-mark" aria-hidden="true">↳</span><strong>{number(excluded)} filtered out</strong><span>{hasFunnel?'The screening reasons are shown below.':'Earlier runs did not capture rejection counts. Values are not estimated.'}</span></div>
-   {hasFunnel&&<div className="disc-funnel-caption">Filtered means rejected by the initial source rules. {number(data?.not_selected??0)} additional passing posting(s) were beyond per-board processing limits. {number(data?.save_failures??0)} database write(s) failed. Neither is counted as a screening rejection.</div>}
+   {hasFunnel&&!fullyMeasured&&<div className="disc-measurement-note">These figures cover only the source events recorded so far. They may change as this run progresses and may omit older events outside the trace window.</div>}
+   {fullyMeasured&&<div className="disc-funnel-caption">Filtered means rejected by the initial source rules. {number(data?.not_selected??0)} additional passing posting(s) were beyond per-board processing limits. {number(data?.save_failures??0)} database write(s) failed. Neither is counted as a screening rejection.</div>}
    {!hasFunnel&&<div className="disc-measurement-note">Detailed discovery counts were introduced after this run. Select a newer measured run once one is available. Existing totals cannot be reconstructed reliably.</div>}
   </section>
   <div className="disc-work-grid">
@@ -137,7 +147,7 @@ export default function DiscoveryMonitor(){
         <div><span>Inspected</span><b>{source.received}</b></div><div><span>Passed</span><b>{source.accepted}</b></div><div><span>Rejected</span><b>{source.rejected}</b></div><div><span>Stored</span><b>{source.ingested}</b></div>
         <p>Rejected: {source.role} role mismatch · {source.source} invalid source · {source.stale} outside date window. {source.cap?source.cap+' passed the rules but exceeded the processing cap.':''}</p>
       </div>}
-     </div>)}</div>:<div className="disc-empty">{hasFunnel?'No source-screening events were captured in this run. Check the run status or choose another run.':'Source-level breakdown was not collected for this run.'}</div>}
+     </div>)}</div>:<div className="disc-empty">{hasFunnel?'No per-source data is available yet. The worker may be waiting on provider rate limits.':'Source-level breakdown was not collected for this run.'}</div>}
    </section>
   </div>
   <section className="disc-panel disc-results" aria-labelledby="disc-results-title">
