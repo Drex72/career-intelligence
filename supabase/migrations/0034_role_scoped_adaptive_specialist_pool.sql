@@ -121,6 +121,7 @@ declare
  due integer; current_active integer; total_runs integer; failed_runs integer;
  capacity integer; desired integer; spawn integer; available integer;
  applied integer; role_name text; throughput integer; slowdown numeric;
+ observed_throughput numeric; metric_key text;
 begin
  select * into cfg from ci_specialist_pool_config where id=1;
  if not found then raise exception 'specialist pool not configured'; end if;
@@ -180,6 +181,86 @@ begin
     into total_runs,failed_runs from
     (select state from ci_worker_runs where specialist_role=role_name
      and finished_at is not null order by finished_at desc limit 20) s;
+  -- Adapt the predicted work-per-invocation to recent completed actual results,
+  -- never above the safety bound for a single signed invocation.
+  metric_key:=case role_name
+    when 'discovery' then 'boards_scanned'
+    when 'eligibility' then 'reviewed'
+    when 'matching' then 'matched'
+    when 'people' then 'people_processed'
+    when 'outreach' then 'drafts_prepared'
+    else 'replies_classified' end;
+  select avg(least(throughput,coalesce(
+     case when details->>metric_key ~ '^[0-9]+
+    then 0.5 when total_runs>=4 and failed_runs::numeric/total_runs>=0.25
+    then 0.75 else 1 end;
+  desired:=ceil((due::numeric/greatest(1,throughput))*slowdown)::integer;
+  spawn:=case when cfg.enabled then least(remaining_budget,greatest(0,desired-current_active)) else 0 end;
+  remaining_budget:=remaining_budget-spawn;
+  roles:=roles||jsonb_build_array(jsonb_build_object(
+    'role',role_name,'queued',due,'active',current_active,
+    'desired',desired,'spawn',spawn,'throughput_per_run',throughput,
+    'health_factor',slowdown));
+ end loop;
+ return jsonb_build_object('enabled',cfg.enabled,'active_budget',cfg.active_budget,
+  'dispatch_budget',cfg.dispatch_budget,'active_total',active_total,
+  'remaining_dispatch_capacity',remaining_budget,'roles',roles);
+end;
+$specialist_plan$;
+revoke all on function public.ci_specialist_pool_plan() from public,anon,authenticated;
+grant execute on function public.ci_specialist_pool_plan() to service_role;
+
+create or replace function public.ci_run_specialist_pool(p_dry_run boolean default false)
+returns jsonb language plpgsql security invoker set search_path=public as $specialist_run$
+declare
+ plan jsonb; cfg record; last_time timestamptz;
+ role_record record; i integer; req bigint; all_launched integer:=0;
+ dispatched jsonb:='{}'::jsonb; role_launched integer;
+ decision text; wave_id bigint;
+begin
+ if not pg_try_advisory_xact_lock(hashtext('ci:specialist-pool')) then
+  return jsonb_build_object('decision','controller_busy','launched',0);end if;
+ if not p_dry_run then perform ci_reclaim_expired_people_leases(); end if;
+ plan:=ci_specialist_pool_plan();
+ if p_dry_run then return plan||jsonb_build_object('dry_run',true,'launched',0); end if;
+ select * into cfg from ci_specialist_pool_config where id=1;
+ if not cfg.enabled then return plan||jsonb_build_object('decision','disabled','launched',0); end if;
+ select observed_at into last_time from ci_specialist_pool_waves
+   where total_launched>0 order by observed_at desc limit 1;
+ if last_time is not null and last_time>now()-make_interval(secs=>cfg.interval_seconds) then
+   return plan||jsonb_build_object('decision','cooldown','launched',0); end if;
+ for role_record in select r.role,r.spawn from jsonb_to_recordset(plan->'roles')
+  as r(role text,spawn int) loop
+  role_launched:=0;
+  if role_record.spawn>0 then
+    for i in 1..role_record.spawn loop
+      req:=ci_emit_specialist_request(role_record.role);
+      if req is not null then
+        role_launched:=role_launched+1;all_launched:=all_launched+1;
+      end if;
+    end loop;
+  end if;
+  dispatched:=dispatched||jsonb_build_object(role_record.role,role_launched);
+ end loop;
+ decision:=case when all_launched>0 then 'dispatch' else 'idle' end;
+ insert into ci_specialist_pool_waves(plan,dispatched,decision,total_launched)
+   values(plan,dispatched,decision,all_launched) returning id into wave_id;
+ return plan||jsonb_build_object('wave_id',wave_id,'decision',decision,
+   'dispatched',dispatched,'launched',all_launched);
+end;
+$specialist_run$;
+revoke all on function public.ci_run_specialist_pool(boolean) from public,anon,authenticated;
+grant execute on function public.ci_run_specialist_pool(boolean) to service_role;
+
+       then (details->>metric_key)::numeric else null end,0)))
+   into observed_throughput
+   from (select details from ci_worker_runs
+     where specialist_role=role_name and finished_at is not null
+      and state in ('completed','partial')
+     order by finished_at desc limit 12) recent;
+  if observed_throughput is not null then
+    throughput:=greatest(1,least(throughput,ceil(observed_throughput)::integer));
+  end if;
   -- Feedback: high recent failure proportion reduces dispatch pressure.
   slowdown:=case when total_runs>=4 and failed_runs::numeric/total_runs>=0.5
     then 0.5 when total_runs>=4 and failed_runs::numeric/total_runs>=0.25
