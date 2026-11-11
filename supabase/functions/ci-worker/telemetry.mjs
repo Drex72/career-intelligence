@@ -5,7 +5,8 @@ const strings={
  format:60,source_job_id:140,job_id:40,source:60,status:40,
  reason:180,work_mode:35,sponsorship:35,knowledge_revision:70,
 };
-const numbers=new Set(['count','accepted','processed','boards_scanned','reviews','score','confidence','matched','failures']);
+const numbers=new Set(['count','accepted','processed','boards_scanned','reviews','score','confidence','matched','failures',
+ 'received','ingested','rejected','rejected_role','rejected_source','rejected_stale','not_selected']);
 const booleans=new Set(['saved','approved','verified']);
 export function safePreview(value){
  if(!value||typeof value!=='object'||Array.isArray(value))return {};
