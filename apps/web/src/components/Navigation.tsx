@@ -13,7 +13,7 @@ const links:{href:string;label:string;icon:IconName}[]=[
   {href:'/knowledge',label:'Knowledge base',icon:'knowledge'},
   {href:'/outreach',label:'Outreach',icon:'outreach'},
   {href:'/conversations',label:'Conversations',icon:'conversations'},
-  {href:'/factory',label:'Factory flow',icon:'factory'},
+  {href:'/factory',label:'Pipeline monitor',icon:'factory'},
   {href:'/operations',label:'Agent operations',icon:'operations'},
 ];
 const paths:Record<IconName,React.ReactNode>={
