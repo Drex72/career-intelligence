@@ -142,3 +142,46 @@
 .disc-pool-explainer{font-size:10px;color:#85798e;line-height:1.5;margin:0 2px 13px}
 @media(max-width:1250px){.disc-pool-strip{flex-wrap:wrap;gap:10px}.disc-pool-title{min-width:0}.disc-pool-stats{flex-basis:100%;order:3}.disc-pool-decision{margin-left:auto}}
 @media(max-width:750px){.disc-pool-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 4px}.disc-pool-stats>div{padding-left:10px}}
+
+
+/* Role-aware capacity monitor: six compact specialist lanes, no fictitious activity. */
+.disc-specialists{border:1px solid #e7dff4;border-radius:16px;background:#fff;padding:18px 19px;margin-bottom:16px}
+.disc-specialists-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:15px}
+.disc-specialists-heading h2{font-size:16px;letter-spacing:-.02em;color:#302748}
+.disc-specialists-heading p{font-size:11px;color:#827a8f;margin-top:5px;line-height:1.5}
+.disc-specialists-mode{font-size:10px;font-weight:700;white-space:nowrap;border-radius:8px;background:#f4effa;color:#6d5f86;padding:7px 10px}
+.disc-specialists-mode[data-active="yes"]{background:#e6f5ee;color:#227951}
+.disc-specialists-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.disc-specialist-lane{border:1px solid #e9e3f2;background:#fbf9fe;border-radius:11px;padding:13px;text-align:left;display:grid;gap:11px;min-width:0;cursor:pointer;transition:background .13s,border-color .13s}
+.disc-specialist-lane:hover,.disc-specialist-lane:focus-visible{background:#f4effc;border-color:#b7a5e4}
+.disc-specialist-name{display:flex;align-items:center;justify-content:space-between;gap:9px;min-width:0}
+.disc-specialist-name strong{font-size:12px;color:#3b3053;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.disc-specialist-name>span{font-size:9px;font-weight:750;white-space:nowrap}
+.disc-activity-live{color:#198766}.disc-activity-idle{color:#958a9e}
+.disc-specialist-numbers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.disc-specialist-numbers>div{display:grid;gap:4px;min-width:0}
+.disc-specialist-numbers b{font-size:19px;color:#38304c;font-variant-numeric:tabular-nums;line-height:1}
+.disc-specialist-numbers small{font-size:10px;color:#8a8299;white-space:nowrap}
+.disc-specialist-foot{border-top:1px solid #e9e4f1;padding-top:9px;display:flex;gap:7px;justify-content:space-between;align-items:center}
+.disc-specialist-foot span{font-size:10px;color:#827895;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.disc-specialist-foot span:last-child{color:#7350ba;font-weight:760}
+.disc-specialists-footer{display:flex;justify-content:space-between;gap:12px;margin-top:12px;color:#93899f;font-size:10px;line-height:1.5}
+.disc-specialist-layer{position:fixed;inset:0;z-index:1500;display:flex;justify-content:flex-end}
+.disc-specialist-scrim{position:absolute;inset:0;border:0;border-radius:0;background:#1b14366e}
+.disc-specialist-drawer{position:relative;width:min(470px,95vw);height:100dvh;background:#fbf9fe;box-shadow:-18px 0 50px #170f2e50;display:flex;flex-direction:column}
+.disc-specialist-drawer header{background:#fff;padding:21px 23px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #e8e1f3}
+.disc-specialist-drawer header p{font-size:10px;color:#806e9e}
+.disc-specialist-drawer header h2{margin-top:5px;text-transform:capitalize;font-size:20px;color:#32294b}
+.disc-specialist-drawer header button{width:36px;height:36px;flex-shrink:0;border:1px solid #e2daec;border-radius:8px;background:white;font-size:22px}
+.disc-specialist-drawer-body{padding:20px 23px;overflow-y:auto;display:grid;align-content:start;gap:13px}
+.disc-specialist-detail-counts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.disc-specialist-detail-counts>span{display:flex;flex-direction:column;gap:7px;padding:12px;border-radius:9px;background:#f2edf9;color:#746a87;font-size:10px}
+.disc-specialist-detail-counts b{font-size:20px;color:#342a4c;font-variant-numeric:tabular-nums}
+.disc-specialist-drawer h3{font-size:13px;color:#342c49;margin-top:4px}
+.disc-specialist-run{display:grid;gap:5px;border:1px solid #e8e1f3;border-radius:9px;padding:12px;background:white}
+.disc-specialist-run strong{font-size:11px;color:#6450a0;text-transform:capitalize}
+.disc-specialist-run span,.disc-specialist-run small{font-size:10px;color:#7d718d}
+.disc-specialist-note{font-size:11px;line-height:1.6;color:#7d7389}
+@media(max-width:1150px){.disc-specialists-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.disc-specialists{padding:15px}.disc-specialists-grid{grid-template-columns:1fr}.disc-specialists-heading{flex-wrap:wrap}.disc-specialists-footer{flex-wrap:wrap}.disc-specialist-drawer{width:100vw}}
+@media(prefers-reduced-motion:reduce){.disc-specialist-lane{transition:none}}
