@@ -2,7 +2,7 @@
 -- Current ci-worker handles discovery, ATS review and matching within a single invocation;
 -- demand-by-stage is advisory and the same invocation may process multiple stages.
 -- The controller does not cancel already running requests: scale down means no new work is launched.
-create table if not exists public.ci_worker_pool_config (
+create table if not exists ci_worker_pool_config (
   id smallint primary key default 1 check (id=1),
   enabled boolean not null default true,
   max_instances integer not null default 10 check(max_instances between 1 and 10),
@@ -13,11 +13,11 @@ create table if not exists public.ci_worker_pool_config (
   check(reduced_instances<=max_instances)
 );
 insert into public.ci_worker_pool_config(id) values(1) on conflict(id) do nothing;
-alter table public.ci_worker_pool_config enable row level security;
+alter table ci_worker_pool_config enable row level security;
 revoke all on public.ci_worker_pool_config from public,anon,authenticated;
 grant select,update on public.ci_worker_pool_config to service_role;
 
-create table if not exists public.ci_worker_pool_waves (
+create table if not exists ci_worker_pool_waves (
   id bigint generated always as identity primary key,
   observed_at timestamptz not null default clock_timestamp(),
   target integer not null check(target between 1 and 100),
@@ -35,7 +35,7 @@ create table if not exists public.ci_worker_pool_waves (
   check(dispatched<=desired_instances)
 );
 create index if not exists ci_worker_pool_waves_recent_idx on public.ci_worker_pool_waves(observed_at desc,id desc);
-alter table public.ci_worker_pool_waves enable row level security;
+alter table ci_worker_pool_waves enable row level security;
 revoke all on public.ci_worker_pool_waves from public,anon,authenticated;
 revoke all on sequence public.ci_worker_pool_waves_id_seq from public,anon,authenticated;
 grant select,insert on public.ci_worker_pool_waves to service_role;
