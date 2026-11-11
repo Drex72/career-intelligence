@@ -88,6 +88,8 @@ export default function FactoryFlow(){
  const [replaySpeed,setReplaySpeed]=useState(1);
  const [inspectorTab,setInspectorTab]=useState<'event'|'lineage'>('event');
  const [inspectorOpen,setInspectorOpen]=useState(false);
+ const drawerCloseRef=useRef<HTMLButtonElement>(null);
+ const drawerReturnFocusRef=useRef<HTMLElement|null>(null);
  const [selectedJob,setSelectedJob]=useState('');
  const [lineage,setLineage]=useState<JobLineage|null>(null);
  const [lineageError,setLineageError]=useState<string|null>(null);
@@ -97,7 +99,24 @@ export default function FactoryFlow(){
  const [feedExpanded,setFeedExpanded]=useState(true);
  const scrollRef=useRef<HTMLDivElement>(null);
  const interval=flow.data?.poll_interval_ms??8000;
- useEffect(()=>{if(!inspectorOpen)return;const handle=(event:KeyboardEvent)=>{if(event.key==='Escape')setInspectorOpen(false);};window.addEventListener('keydown',handle);return ()=>window.removeEventListener('keydown',handle);},[inspectorOpen]);
+ useEffect(()=>{
+   if(!inspectorOpen)return;
+   drawerReturnFocusRef.current=document.activeElement instanceof HTMLElement?document.activeElement:null;
+   drawerCloseRef.current?.focus();
+   const handle=(event:KeyboardEvent)=>{
+     if(event.key==='Escape')setInspectorOpen(false);
+     if(event.key==='Tab'){
+       const drawer=document.getElementById('factory-record-drawer');
+       const controls=drawer?.querySelectorAll<HTMLElement>('button:not(:disabled),select:not(:disabled),input:not(:disabled),a[href]');
+       if(!controls?.length)return;
+       const first=controls[0],last=controls[controls.length-1];
+       if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}
+       else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}
+     }
+   };
+   window.addEventListener('keydown',handle);
+   return ()=>{window.removeEventListener('keydown',handle);drawerReturnFocusRef.current?.focus();};
+ },[inspectorOpen]);
  useEffect(()=>{
    if(!polling)return;
    const timer=setInterval(()=>flow.reload(),Math.max(5000,interval));
@@ -141,10 +160,10 @@ export default function FactoryFlow(){
  const payloadBefore=inspectorTab==='event'?currentEvent?.input:jobSnapshot?.before;
  const payloadAfter=inspectorTab==='event'?currentEvent?.output:jobSnapshot?.after;
  function chooseEvent(index:number){
-  setEventIndex(index);setView('replay');setReplayPlaying(false);setInspectorTab('event');setInspectorOpen(true);
+  setEventIndex(index);setView('replay');setReplayPlaying(false);setInspectorTab('event');setInspectorOpen(window.matchMedia('(max-width: 850px)').matches);
   const e=events[index];if(e){setSelectedStage(e.stage);if(e.job_id)setSelectedJob(e.job_id);}
  }
- function chooseStage(id:Stage){setSelectedStage(id);setInspectorTab('lineage');setInspectorOpen(true);}
+ function chooseStage(id:Stage){setSelectedStage(id);setInspectorTab('lineage');setInspectorOpen(window.matchMedia('(max-width: 850px)').matches);}
  function goToStage(){
    const item=NODES.find(n=>n.id===selectedStage);
    if(!item||!scrollRef.current)return;
@@ -168,6 +187,7 @@ export default function FactoryFlow(){
   <header className="factory-v2-toolbar">
    <div><span className="factory-eyebrow">LIVE TOPOLOGY / 11 STATIONS</span><h2 id="flow-map-title">Processing network</h2><p>Click any station to inspect its execution, fields, and latest recorded transformations.</p></div>
    <div className="factory-v2-controls">
+    <button className="factory-v2-ghost factory-v2-open-drawer" type="button" title="Open detailed before-and-after records" onClick={()=>setInspectorOpen(true)}>Inspect data <span aria-hidden="true">↗</span></button>
     <div className="factory-v2-segmented" role="group" aria-label="Chart playback mode">
      <button type="button" className={view==='live'?'active':''} aria-pressed={view==='live'} onClick={()=>{setView('live');setReplayPlaying(false);}}>Live map</button>
      <button type="button" className={view==='replay'?'active':''} aria-pressed={view==='replay'} onClick={()=>{setView('replay');setEventIndex(Math.max(0,events.length-1));setReplayPlaying(events.length>1);}}>Replay events</button>
@@ -202,7 +222,7 @@ export default function FactoryFlow(){
       const role=ROLES.find(r=>r.node===n.id);
       const running=role&&flow.data?.roles.find(r=>r.role===role.name)?.active;
       return <button key={n.id} type="button" className={'factory-v2-node '+(selectedStage===n.id?'selected ':'')+(active?'pulsing ':'')+(running?'running':'')}
-        style={{left:n.x,top:n.y,width:NODE_WIDTH,height:NODE_HEIGHT}} aria-pressed={selectedStage===n.id} onClick={()=>chooseStage(n.id)}>
+        style={{left:n.x,top:n.y,width:NODE_WIDTH,height:NODE_HEIGHT}} aria-pressed={selectedStage===n.id} aria-label={"Inspect "+n.name+": "+n.transform} data-tooltip={n.transform} onClick={()=>chooseStage(n.id)}>
         <span className="factory-v2-node-top"><span className={'factory-v2-node-icon kind-'+n.kind}><StationIcon kind={n.kind}/></span><span className="factory-v2-node-status"><i className={running?'active':active?'recent':''}/>{running?'Running':active?(view==='replay'?'Replay':'Observed'):'Idle'}</span></span>
         <strong>{n.name}</strong><small>{n.agent}</small>
         <span className="factory-v2-node-bottom"><span>{n.id==='registry'?'Sources':n.id==='eligibility'?'Assessments':n.id==='knowledge'?'Notes':n.id==='delivery'?'Delivered':'Records'}</span><b>{nfmt(value)}</b></span>
@@ -224,39 +244,19 @@ export default function FactoryFlow(){
     <select aria-label="Replay speed" value={replaySpeed} onChange={e=>setReplaySpeed(Number(e.target.value))}><option value={1}>1×</option><option value={2}>2×</option><option value={4}>4×</option></select>
   </div>}
    </div>
-   {inspectorOpen&&<button type="button" className="factory-v2-inspector-backdrop" onClick={()=>setInspectorOpen(false)} aria-label="Close inspector"/>}
-   <aside className={'factory-v2-inspector-rail '+(inspectorOpen?'open':'')} aria-label="Selected station details and transformation data">
-    <div className="factory-v2-inspector-rail-head"><div><span className="factory-eyebrow">STATION DETAILS</span><strong>{stage.name}</strong></div><button className="factory-v2-inspector-close" type="button" onClick={()=>setInspectorOpen(false)} aria-label="Close inspector">×</button></div>
-  <section className="factory-v2-panel factory-v2-details" aria-labelledby="details-title">
-   <div className="factory-v2-panel-header"><div><span className="factory-eyebrow">NODE INSPECTOR / {selectedStage.toUpperCase()}</span><h2 id="details-title">{stage.name}</h2></div><span className="factory-v2-stage-chip">{stage.kind}</span></div>
-   <div className="factory-v2-transform-line"><div><span>INPUT</span><p>{stage.input}</p></div><span aria-hidden="true">→</span><div><span>TRANSFORM</span><p>{stage.transform}</p></div><span aria-hidden="true">→</span><div><span>OUTPUT</span><p>{stage.output}</p></div></div>
-   <div className="factory-v2-details-meta">
-    <div><span>Component</span><strong>{stage.agent}</strong></div>
-    <div><span>Recorded stage events</span><strong>{events.filter(e=>e.stage===selectedStage).length}</strong></div>
-    <div><span>Specialist task state</span><strong>{roleState?.latest_state?.replaceAll('_',' ')||'Not applicable'}</strong></div>
-    <div><span>Most recent event</span><strong>{events.find(e=>e.stage===selectedStage)?rel(events.find(e=>e.stage===selectedStage)!.time):'Not observed'}</strong></div>
-   </div>
-  </section>
 
-  <section className="factory-v2-panel factory-v2-payload" aria-labelledby="payload-title">
-   <div className="factory-v2-panel-header"><div><span className="factory-eyebrow">DATA SHAPE / BEFORE → AFTER</span><h2 id="payload-title">Transformation inspector</h2></div><div className="factory-v2-segmented" role="group" aria-label="Inspector data source"><button type="button" className={inspectorTab==='event'?'active':''} aria-pressed={inspectorTab==='event'} onClick={()=>setInspectorTab('event')}>Event</button><button type="button" className={inspectorTab==='lineage'?'active':''} aria-pressed={inspectorTab==='lineage'} onClick={()=>setInspectorTab('lineage')}>Job lineage</button></div></div>
-   <div className="factory-v2-job-select"><label htmlFor="factory-job">Trace a job</label><select id="factory-job" value={selectedJob} onChange={e=>{setSelectedJob(e.target.value);setInspectorTab('lineage');}}><option value="">Select a stored job</option>{(flow.data?.jobs||[]).map(j=><option key={j.id} value={j.id}>{j.company} · {j.title}</option>)}</select></div>
-   {inspectorTab==='lineage'&&<div className="factory-v2-snapshot-tabs" role="group" aria-label="Recorded job transformation stages">
-    {(lineage?.snapshots||[]).map((s,i)=><button type="button" className={jobSnapshot===s?'active':''} key={s.stage+i} onClick={()=>setSelectedStage(s.stage)}>{s.stage.replaceAll('_',' ')}</button>)}
-    {lineageBusy&&<span>Loading lineage…</span>}
-   </div>}
-   <div className="factory-v2-data-meta">
-    <span>{inspectorTab==='event'?(currentEvent?currentEvent.type.replaceAll('_',' ')+' · '+when(currentEvent.time):'No event selected'):(jobSnapshot?jobSnapshot.stage+' · '+when(jobSnapshot.time):'No saved snapshot for this job')}</span>
-    <span>{inspectorTab==='event'&&currentEvent?.kind==='provenance'?'Historical record, not live agent output':inspectorTab==='event'?'Recorded event':'Persisted job data'}</span>
-   </div>
-   {lineageError&&inspectorTab==='lineage'&&<p className="error-message">{lineageError}</p>}
-   <div className="factory-v2-json-pair">
-    <div className="factory-v2-codebox"><div className="factory-v2-codehead"><span>INPUT / BEFORE</span><span>JSON</span></div><pre>{pretty(payloadBefore)}</pre></div>
-    <div className="factory-v2-codebox after"><div className="factory-v2-codehead"><span>OUTPUT / AFTER</span><span>JSON</span></div><pre>{pretty(payloadAfter)}</pre></div>
-   </div>
-   <p className="factory-v2-payload-note">Only stored, allowlisted metadata is shown. Raw ATS responses and private note bodies are never replayed as if they were retained.</p>
-  </section>
-
+   <aside className="factory-v2-inspector-rail" aria-label="Selected station overview">
+    <div className="factory-v2-inspector-rail-head">
+     <div><span className="factory-eyebrow">SELECTED STATION</span><strong title={stage.name}>{stage.name}</strong></div>
+     <span className="factory-v2-stage-chip">{stage.kind}</span>
+    </div>
+    <div className="factory-v2-compact-details">
+     <div className="factory-v2-compact-agent" title={stage.agent}><span>Component</span><strong>{stage.agent}</strong></div>
+     <div className="factory-v2-compact-flow"><span title={stage.input}><small>INPUT</small><b>{stage.input}</b></span><span className="factory-v2-compact-arrow" aria-hidden="true">↓</span><span title={stage.output}><small>OUTPUT</small><b>{stage.output}</b></span></div>
+     <div className="factory-v2-compact-transform" title={stage.transform}><small>PROCESSING LOGIC</small><p>{stage.transform}</p></div>
+     <div className="factory-v2-compact-stats"><div><small>Recorded events</small><strong>{events.filter(e=>e.stage===selectedStage).length}</strong></div><div><small>Specialist state</small><strong title={roleState?.latest_state||'Not applicable'}>{roleState?.latest_state?.replaceAll('_',' ')||'Not applicable'}</strong></div></div>
+     <button type="button" className="factory-v2-inspect-cta" onClick={()=>setInspectorOpen(true)} title="Open full job lineage, execution events and JSON comparison">Inspect records &amp; JSON <span aria-hidden="true">↗</span></button>
+    </div>
    </aside>
   </div>
  </section>
@@ -289,6 +289,32 @@ export default function FactoryFlow(){
    </div>}
   </section>
  </div>
+
+ {inspectorOpen&&<div className="factory-v2-drawer-layer">
+   <button type="button" className="factory-v2-drawer-scrim" aria-label="Close records drawer" onClick={()=>setInspectorOpen(false)}/>
+   <aside id="factory-record-drawer" className="factory-v2-record-drawer" role="dialog" aria-modal="true" aria-labelledby="factory-drawer-title">
+    <header className="factory-v2-record-drawer-head"><div><span className="factory-eyebrow">PROCESSING RECORDS / {selectedStage.toUpperCase()}</span><h2 id="factory-drawer-title" title={stage.name}>{stage.name}</h2><p title={stage.agent}>{stage.agent}</p></div>
+      <button ref={drawerCloseRef} type="button" className="factory-v2-inspector-close" onClick={()=>setInspectorOpen(false)} aria-label="Close records drawer">×</button>
+    </header>
+    <div className="factory-v2-record-drawer-scroll">
+     <section className="factory-v2-panel factory-v2-details" aria-labelledby="details-title">
+       <div className="factory-v2-panel-header"><div><span className="factory-eyebrow">TRANSFORMATION</span><h2 id="details-title">Processing steps</h2></div><span className="factory-v2-stage-chip">{stage.kind}</span></div>
+       <div className="factory-v2-transform-line"><div><span>INPUT</span><p>{stage.input}</p></div><span aria-hidden="true">→</span><div><span>TRANSFORM</span><p>{stage.transform}</p></div><span aria-hidden="true">→</span><div><span>OUTPUT</span><p>{stage.output}</p></div></div>
+       <div className="factory-v2-details-meta"><div><span>Recorded events</span><strong>{events.filter(e=>e.stage===selectedStage).length}</strong></div><div><span>Specialist task</span><strong>{roleState?.latest_state?.replaceAll('_',' ')||'Not applicable'}</strong></div></div>
+     </section>
+     <section className="factory-v2-panel factory-v2-payload" aria-labelledby="payload-title">
+       <div className="factory-v2-panel-header"><div><span className="factory-eyebrow">DATA SHAPE / BEFORE → AFTER</span><h2 id="payload-title">Transformation inspector</h2></div><div className="factory-v2-segmented" role="group" aria-label="Inspector data source"><button type="button" className={inspectorTab==='event'?'active':''} aria-pressed={inspectorTab==='event'} onClick={()=>setInspectorTab('event')}>Event</button><button type="button" className={inspectorTab==='lineage'?'active':''} aria-pressed={inspectorTab==='lineage'} onClick={()=>setInspectorTab('lineage')}>Job lineage</button></div></div>
+       <div className="factory-v2-job-select"><label htmlFor="factory-job">Trace a job</label><select id="factory-job" value={selectedJob} onChange={e=>{setSelectedJob(e.target.value);setInspectorTab('lineage');}}><option value="">Select a stored job</option>{(flow.data?.jobs||[]).map(j=><option key={j.id} value={j.id}>{j.company} · {j.title}</option>)}</select></div>
+       {inspectorTab==='lineage'&&<div className="factory-v2-snapshot-tabs" role="group" aria-label="Recorded job transformation stages">{(lineage?.snapshots||[]).map((s,i)=><button type="button" className={jobSnapshot===s?'active':''} key={s.stage+i} onClick={()=>setSelectedStage(s.stage)}>{s.stage.replaceAll('_',' ')}</button>)}{lineageBusy&&<span>Loading lineage…</span>}</div>}
+       <div className="factory-v2-data-meta"><span>{inspectorTab==='event'?(currentEvent?currentEvent.type.replaceAll('_',' ')+' · '+when(currentEvent.time):'No event selected'):(jobSnapshot?jobSnapshot.stage+' · '+when(jobSnapshot.time):'No saved snapshot for this job')}</span><span>{inspectorTab==='event'&&currentEvent?.kind==='provenance'?'Historical record, not live agent output':inspectorTab==='event'?'Recorded event':'Persisted job data'}</span></div>
+       {lineageError&&inspectorTab==='lineage'&&<p className="error-message">{lineageError}</p>}
+       <div className="factory-v2-json-pair"><div className="factory-v2-codebox"><div className="factory-v2-codehead"><span>INPUT / BEFORE</span><span>JSON</span></div><pre>{pretty(payloadBefore)}</pre></div><div className="factory-v2-codebox after"><div className="factory-v2-codehead"><span>OUTPUT / AFTER</span><span>JSON</span></div><pre>{pretty(payloadAfter)}</pre></div></div>
+       <p className="factory-v2-payload-note">Only stored, allowlisted metadata is shown. Raw ATS responses and private notes are not replayed.</p>
+     </section>
+    </div>
+   </aside>
+ </div>}
+
  <section className="factory-v2-bottom" aria-label="Runtime health">
   <div><span className="factory-v2-health-dot"/><span>Last API observation</span><strong>{when(flow.data?.observed_at)}</strong></div>
   <div><span>Latest signed worker</span><strong>{flow.data?.runs[0]?flow.data.runs[0].state+' · '+rel(flow.data.runs[0].started_at):'Not recorded'}</strong></div>
