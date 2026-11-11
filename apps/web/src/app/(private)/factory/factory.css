@@ -360,3 +360,19 @@
 .factory-v2-compact-event-title{font-size:10px;color:#2f536d;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
 .factory-v2-compact-event-time{font-size:9px;color:#8aa0ad;white-space:nowrap}
 .factory-v2-compact-events>p{font-size:10px;color:#8b9eac;padding:6px 2px}
+
+
+/* Agent roster and processing timeline share one row; stack only on narrow screens. */
+.factory-v2-grid:not(.lower){
+ grid-template-columns:repeat(2,minmax(0,1fr));
+ align-items:start;
+}
+.factory-v2-grid:not(.lower)>.factory-v2-panel{min-width:0}
+.factory-v2-grid:not(.lower)>.factory-v2-timeline .factory-v2-eventlist{
+ max-height:510px;
+ overflow-y:auto;
+}
+@media(max-width:900px){
+ .factory-v2-grid:not(.lower){grid-template-columns:1fr}
+ .factory-v2-grid:not(.lower)>.factory-v2-timeline .factory-v2-eventlist{max-height:440px}
+}
