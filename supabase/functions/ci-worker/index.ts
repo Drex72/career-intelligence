@@ -114,7 +114,12 @@ Deno.serve(async (request:Request)=>{
           if(!entry){
             report.filtered++;
             if(!roleOK)report.rejected_role++;
-            else report.rejected_source++;
+            else {
+              const published=String(job?.publication_date||'');
+              const stamp=Date.parse(/(?:Z|[+-]\d\d:\d\d)$/.test(published)?published:published+'Z');
+              if(!Number.isFinite(stamp)||stamp<now()-7*86400_000||stamp>now()+86400_000)report.rejected_stale++;
+              else report.rejected_source++;
+            }
             continue;
           }
           report.normalized++;remotiveNormalized++;
@@ -229,6 +234,7 @@ Deno.serve(async (request:Request)=>{
         report.rejected_stale+=audit.excluded.stale;
         report.not_selected+=Math.max(0,candidates.length-shortlisted.length);
         const priorIngested=report.ats_jobs;
+        let sampledPostings=0;
         for(const candidate of shortlisted){
           const saved=await db.rpc('ci_ingest_ats_job',{
             p_provider:candidate.provider,p_board:candidate.board,
@@ -238,7 +244,7 @@ Deno.serve(async (request:Request)=>{
           });
           if(!saved.error&&saved.data){
             report.ats_jobs++;
-            await recordStage('ingestion','ats_normalizer','posting_saved',
+            if(sampledPostings++<5)await recordStage('ingestion','ats_normalizer','posting_saved',
               {provider:candidate.provider,board:candidate.board,
                source_job_id:candidate.sourceJobId,format:'provider_posting'},
               {company:candidate.company,title:candidate.title,location:candidate.remoteText,
