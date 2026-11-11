@@ -18,11 +18,16 @@ type Trace={
  id:string;run_id?:string|null;job_id?:string|null;stage:string;agent:string;type:string;
  input:Record<string,unknown>;output:Record<string,unknown>;time:string;kind:string;
 };
+type PoolWave={id:number;observed_at:string;target:number;already_delivered:number;remaining:number;
+ concurrency_ceiling:number;active_count:number;due_boards:number;pending_reviews:number;
+ pending_matches:number;desired_instances:number;dispatched:number;decision:string};
+type PoolInfo={config:{enabled:boolean;max_instances:number;reduced_instances:number;reduce_after_delivered:number;min_wave_interval_seconds:number}|null;waves:PoolWave[]};
 type Flow={
  observed_at:string;poll_interval_ms:number;events:Trace[];runs:Run[];
  roles:{role:string;latest_state:string;active:boolean;latest_at:string|null}[];
  jobs:{id:string;company:string;title:string}[];
  stage_counts:{registry?:number};latest_batch:{delivered:number;target:number}|null;
+ worker_pool?:PoolInfo;
 };
 type Breakdown={provider:string;board:string;company:string;received:number;accepted:number;ingested:number;
  rejected:number;role:number;source:number;stale:number;cap:number;time:string;id:string};
@@ -65,6 +70,8 @@ export default function DiscoveryMonitor(){
  useEffect(()=>{try{setOnboard(localStorage.getItem('ci-discovery-tour-v1')!=='seen');}catch{}},[]);
  const finishTour=useCallback(()=>{setOnboard(false);try{localStorage.setItem('ci-discovery-tour-v1','seen');}catch{}},[]);
  useEffect(()=>{if(!autoRefresh)return;const t=setInterval(resource.reload,Math.max(5000,resource.data?.poll_interval_ms??8000));return()=>clearInterval(t);},[autoRefresh,resource.reload,resource.data?.poll_interval_ms]);
+ const pool=resource.data?.worker_pool;
+ const wave=pool?.waves?.[0];
  const runs=resource.data?.runs??[];
  const run=runs.find(x=>x.id===selected)??runs[0];
  const data=run?.details??null;
@@ -112,6 +119,19 @@ export default function DiscoveryMonitor(){
     <button className="disc-icon-button" type="button" title="Refresh run data" onClick={resource.reload} aria-label="Refresh run data">↻</button>
    </div>
   </section>
+  <section className="disc-pool-strip" aria-label="Adaptive worker pool">
+   <div className="disc-pool-title"><span className="disc-pool-indicator" data-state={pool?.config?.enabled?'enabled':'paused'}/><div><strong>Worker pool</strong><span>{pool?.config?.enabled?'Adaptive scheduling active':'Adaptive scheduling paused or unavailable'}</span></div></div>
+   {wave?<div className="disc-pool-stats">
+    <div title="Worker requests actually issued in the last controller wave"><small>Launched</small><strong>{wave.dispatched}</strong></div>
+    <div title="Maximum permitted workers given the current delivery progress"><small>Capacity</small><strong>{wave.concurrency_ceiling}</strong></div>
+    <div title="Recently active worker invocations as observed at dispatch time"><small>Already active</small><strong>{wave.active_count}</strong></div>
+    <div title="Approved ATS boards currently eligible for another provider-safe scan"><small>Due boards</small><strong>{wave.due_boards}</strong></div>
+    <div title="Reviews waiting for official verification"><small>Reviews queued</small><strong>{wave.pending_reviews}</strong></div>
+    <div title="Approved knowledge matching tasks waiting to run"><small>Matching queued</small><strong>{wave.pending_matches}</strong></div>
+   </div>:<p className="disc-pool-empty">No controller wave recorded yet. Metrics appear after the scheduled controller runs.</p>}
+   {wave&&<div className="disc-pool-decision" title={'Evaluated '+fullDate(wave.observed_at)+'; '+wave.decision}><strong>{wave.decision.replaceAll('_',' ')}</strong><small>{fullDate(wave.observed_at)}</small></div>}
+  </section>
+  <p className="disc-pool-explainer">The controller launches real signed worker instances when approved sources or queues have work. Capacity reduces from 10 to 5 near the daily target; workers already running are allowed to finish. These are shared pipeline workers, not separate LangGraph agents.</p>
   <section className="disc-journey" aria-labelledby="disc-journey-title">
    <div className="disc-section-heading"><div><h2 id="disc-journey-title">Discovery at a glance</h2><p>Counts come from the selected worker run, not the whole database. In-progress runs update as sources finish.</p></div><span className="disc-label">{fullyMeasured?'MEASURED':running&&observedSources?'LIVE · SO FAR':observedSources?'PARTIAL EVENT RECORD':'HISTORICAL / LIMITED DATA'}</span></div>
    <div className="disc-funnel">

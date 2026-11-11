@@ -121,3 +121,24 @@
 .disc-source-examples>div{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}
 .disc-source-examples>div span{flex:1;min-width:0;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#49405e}
 .disc-source-examples>div small{font-size:9px;color:#8f613f;background:#fff1df;border-radius:5px;padding:3px 6px;white-space:nowrap}
+
+
+/* Read-only pool telemetry, not a decorative progress metric. */
+.disc-pool-strip{display:flex;align-items:center;gap:16px;min-width:0;padding:12px 15px;border:1px solid #ddd6ee;border-radius:13px;background:#fcfaff;margin-bottom:6px}
+.disc-pool-title{display:flex;align-items:center;gap:10px;min-width:156px;flex-shrink:0}
+.disc-pool-title>div{display:grid;gap:3px;min-width:0}
+.disc-pool-title strong{font-size:12px;color:#302748;white-space:nowrap}
+.disc-pool-title>div>span{font-size:10px;color:#7d708b;white-space:nowrap}
+.disc-pool-indicator{width:8px;height:8px;border-radius:50%;background:#9d9aa6;flex-shrink:0}
+.disc-pool-indicator[data-state="enabled"]{background:#36ab83}
+.disc-pool-stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;flex:1;min-width:0}
+.disc-pool-stats>div{padding:3px 9px;border-left:1px solid #e8e1f2;display:grid;gap:5px;min-width:0}
+.disc-pool-stats small{font-size:9px;color:#80758f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.disc-pool-stats strong{font-size:18px;color:#302744;font-variant-numeric:tabular-nums;line-height:1}
+.disc-pool-decision{margin-left:auto;display:grid;gap:4px;text-align:right;flex-shrink:0;max-width:145px}
+.disc-pool-decision strong{text-transform:capitalize;font-size:10px;color:#6c54b1;white-space:nowrap}
+.disc-pool-decision small{font-size:9px;color:#85798c;white-space:nowrap}
+.disc-pool-empty{font-size:11px;color:#81758c;line-height:1.5}
+.disc-pool-explainer{font-size:10px;color:#85798e;line-height:1.5;margin:0 2px 13px}
+@media(max-width:1250px){.disc-pool-strip{flex-wrap:wrap;gap:10px}.disc-pool-title{min-width:0}.disc-pool-stats{flex-basis:100%;order:3}.disc-pool-decision{margin-left:auto}}
+@media(max-width:750px){.disc-pool-stats{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 4px}.disc-pool-stats>div{padding-left:10px}}

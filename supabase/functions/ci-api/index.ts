@@ -87,6 +87,17 @@ Deno.serve(async (request:Request)=>{
           contacts,drafts,conversations,batches]){
           if(result.error)throw new Error('flow observability read unavailable');
         }
+        // Worker-pool audit is private, returned only after owner auth.
+        // Do not expose signed nonces, request payloads, secrets or queued HTTP IDs.
+        const [poolWaves,poolConfig]=await Promise.all([
+          db.from('ci_worker_pool_waves')
+            .select('id,observed_at,target,already_delivered,remaining,concurrency_ceiling,active_count,due_boards,pending_reviews,pending_matches,desired_instances,dispatched,decision')
+            .order('observed_at',{ascending:false}).limit(6),
+          db.from('ci_worker_pool_config')
+            .select('enabled,max_instances,reduced_instances,reduce_after_delivered,min_wave_interval_seconds')
+            .eq('id',1).maybeSingle()
+        ]);
+        if(poolWaves.error||poolConfig.error)throw new Error('worker pool status unavailable');
         const latest=list(batches.data)[0];
         let delivered=0;
         if(latest){
@@ -148,6 +159,8 @@ Deno.serve(async (request:Request)=>{
           knowledge_documents:knowledgeCount.count??0,
           latest_batch:latest?{date:latest.local_date,state:latest.state,target:latest.target,delivered}:null,
           runs:list(workers.data),roles:roleStates,
+          worker_pool:{config:poolConfig.data,waves:list(poolWaves.data)},
+
           jobs:list(jobs.data).map((j:any)=>({
             id:j.id,title:j.title,company:j.ci_companies?.legal_name||'Unknown',
             status:j.status,published_at:j.published_at,first_seen_at:j.first_seen_at
