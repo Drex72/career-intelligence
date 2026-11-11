@@ -286,8 +286,6 @@ export default function FactoryFlow(){
    })}</div>}
    <div className="factory-v2-agent-caution">Worker functions can perform ingestion and eligibility without a separate LangGraph run. An idle role does not mean scheduled collection is broken.</div>
   </section>
- </div>
- <div className="factory-v2-grid lower">
   <section className="factory-v2-panel factory-v2-timeline" aria-labelledby="eventstream-title">
    <div className="factory-v2-panel-header"><div><span className="factory-eyebrow">OBSERVABILITY / TIMELINE</span><h2 id="eventstream-title">Processing events</h2></div><button type="button" className="factory-v2-ghost" aria-expanded={feedExpanded} onClick={()=>setFeedExpanded(v=>!v)}>{feedExpanded?'Hide feed':'Show feed'}</button></div>
    <p className="factory-v2-panel-sub">New instrumented events are recorded at execution time. Older events are provenance snapshots, labeled separately.</p>
