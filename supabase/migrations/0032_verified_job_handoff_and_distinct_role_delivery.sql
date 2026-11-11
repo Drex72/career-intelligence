@@ -85,7 +85,7 @@ begin
   end if;
   return true;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.ci_generate_daily_batch(p_owner_user_id uuid, p_local_date date, p_target integer DEFAULT 100)
@@ -157,7 +157,7 @@ begin
     where id=v_batch_id;
   return v_inserted;
 end;
-$function$
+$function$;
 
 
 revoke all on function public.ci_queue_verified_job_handoffs(uuid) from public,anon,authenticated;
