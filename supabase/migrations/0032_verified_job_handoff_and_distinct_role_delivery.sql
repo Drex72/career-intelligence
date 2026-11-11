@@ -2,6 +2,11 @@
 -- not only one employer over the entire lifetime of the account.
 -- Source-of-truth approved knowledge uses ci_knowledge_versions.revision = content_sha;
 -- git_sha tracks the repository snapshot and is NOT a version revision.
+-- The old batch uniqueness constraint enforced one employer per day.
+-- Distinct verified roles may share a company; job-id uniqueness remains enforced.
+alter table public.ci_daily_batch_items
+  drop constraint if exists ci_daily_batch_items_batch_id_company_id_key;
+
 CREATE OR REPLACE FUNCTION public.ci_queue_verified_job_handoffs(p_job_id uuid)
  RETURNS boolean
  LANGUAGE plpgsql
