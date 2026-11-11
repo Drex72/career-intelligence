@@ -107,6 +107,7 @@ Deno.serve(async (request:Request)=>{
     runID=run.id;
     await recordStage('sources','signed_ci_worker','run_started',
       {format:'signed_worker_request',role},{status:'running'});
+    const cached=new Map<string,unknown>();
     if(role==='legacy'||role==='discovery'){
     // One feed request per six hours, matching provider's published guidance.
     const allowed=checked(await db.rpc('ci_claim_feed_slot',{p_action:'remotive'}));
@@ -291,7 +292,6 @@ Deno.serve(async (request:Request)=>{
       }catch{report.failures++;}
     }
     }
-    const cached=new Map<string,unknown>();
     if(role==='legacy'||role==='eligibility'){
     // Deterministic official evidence checks; never infer Nigeria from "remote" alone.
     const queue=rows(checked(await db.from('ci_eligibility_review_queue')
