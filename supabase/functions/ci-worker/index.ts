@@ -4,13 +4,13 @@
 // All network destinations are fixed public source APIs. Never send email.
 import {createClient} from 'npm:@supabase/supabase-js@2.119.0';
 import {validEnvelope,MAX_BODY_BYTES,MAX_ATS_JOBS_PER_BOARD,MAX_REVIEWS_PER_RUN,selectDueSources} from './policy.mjs';
-import {boardEndpoint,normalizeBoard,validBoard} from './ats.mjs';
+import {boardEndpoint,analyzeBoard,validBoard} from './ats.mjs';
 import {candidateBoards} from './candidates.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription,postingLocation} from './eligibility.mjs';
 import {classifyWorkFacts} from './work-facts.mjs';
 import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
 import {safePreview} from './telemetry.mjs';
-import {normalizeHimalayas,safeHimalayasCursor,isSoftwareRole} from './himalayas.mjs';
+import {analyzeHimalayas,safeHimalayasCursor,isSoftwareRole} from './himalayas.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
 const response=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
@@ -89,7 +89,8 @@ Deno.serve(async (request:Request)=>{
     if(saved.error)report.telemetry_failures++;
   }
   const report={remotive:0,himalayas:0,ats_jobs:0,boards_scanned:0,reviewed:0,verified_eligible:0,likely_eligible:0,unknown:0,ineligible:0,candidates:0,matched:0,
-    attempts:0,failures:0,telemetry_failures:0};
+    attempts:0,failures:0,telemetry_failures:0,received:0,normalized:0,filtered:0,
+    rejected_role:0,rejected_source:0,rejected_stale:0,not_selected:0,save_failures:0};
   try{
     const run=checked(await db.from('ci_worker_runs')
       .insert({state:'running'}).select('id').single());
@@ -103,14 +104,25 @@ Deno.serve(async (request:Request)=>{
       try{
         const feed=await fetchJSON('https://remotive.com/api/remote-jobs?category=software-dev&limit=100',15000);
         if(!Array.isArray(feed?.jobs))throw new Error('feed format changed');
-        for(const job of feed.jobs.slice(0,100)){
+        const sourceRows=feed.jobs.slice(0,100);
+        report.received+=sourceRows.length;
+        let remotiveNormalized=0;
+        for(const job of sourceRows){
+          // Match the current role rule separately so the user can see why titles were skipped.
+          const roleOK=isSoftwareRole(job?.title);
           const entry=remotiveRole(job,now());
-          if(!entry)continue;
+          if(!entry){
+            report.filtered++;
+            if(!roleOK)report.rejected_role++;
+            else report.rejected_source++;
+            continue;
+          }
+          report.normalized++;remotiveNormalized++;
           const saved=await db.rpc('ci_ingest_remotive_job',{
             p_source_id:entry.id,p_company:entry.company,p_title:entry.title,
             p_url:entry.url,p_published_at:entry.published,p_location:entry.location
           });
-          if(saved.error||!saved.data){report.failures++;continue;}
+          if(saved.error||!saved.data){report.failures++;report.save_failures++;continue;}
           report.remotive++;
           if(report.candidates<10){
             for(const candidate of candidateBoards(entry.description,entry.company,entry.url)){
@@ -123,9 +135,11 @@ Deno.serve(async (request:Request)=>{
             }
           }
         }
-        await recordStage('sources','remotive_feed','feed_normalized',
-          {provider:'remotive',format:'remote_feed'},
-          {accepted:report.remotive,format:'normalized_job'});
+        await recordStage('sources','remotive_feed','source_screened',
+          {provider:'remotive',format:'remote_feed',received:sourceRows.length},
+          {accepted:remotiveNormalized,ingested:report.remotive,rejected:sourceRows.length-remotiveNormalized,
+           rejected_role:report.rejected_role,rejected_source:report.rejected_source,
+           format:'normalized_job'});
       }catch{report.failures++;}
     }
     // Himalayas API refreshes once daily. Respect its shared unauthenticated
@@ -139,14 +153,22 @@ Deno.serve(async (request:Request)=>{
         try{
           const endpoint='https://himalayas.app/jobs/api?limit=20'+(cursor?'&cursor='+encodeURIComponent(cursor):'');
           const page=await fetchJSON(endpoint);
-          const jobs=normalizeHimalayas(page);
+          const audit=analyzeHimalayas(page);
+          const jobs=audit.jobs;
+          report.received+=audit.scanned;
+          report.normalized+=jobs.length;
+          report.filtered+=audit.scanned-jobs.length;
+          report.rejected_role+=audit.excluded.role;
+          report.rejected_source+=audit.excluded.source;
+          report.rejected_stale+=audit.excluded.stale;
+          const priorIngested=report.himalayas;
           for(const job of jobs){
             const saved=await db.rpc('ci_ingest_himalayas_job',{
               p_guid:job.guid,p_company:job.company,p_title:job.title,
               p_application_link:job.applicationLink,p_published_at:job.lastUpdatedAt,
               p_locations:job.locations
             });
-            if(saved.error||!saved.data){report.failures++;continue;}
+            if(saved.error||!saved.data){report.failures++;report.save_failures++;continue;}
             report.himalayas++;
             // An official ATS application link is a proposal, not verified employer identity.
             // The user must approve it in the source-candidate queue before scanning.
@@ -161,13 +183,17 @@ Deno.serve(async (request:Request)=>{
               }
             }
           }
+          await recordStage('sources','himalayas_feed','source_screened',
+            {provider:'himalayas',format:'remote_feed',received:audit.scanned},
+            {accepted:jobs.length,ingested:report.himalayas-priorIngested,
+             rejected:audit.scanned-jobs.length,rejected_role:audit.excluded.role,
+             rejected_source:audit.excluded.source,rejected_stale:audit.excluded.stale,
+             format:'normalized_job'});
           const next=safeHimalayasCursor(page?.nextCursor,seenCursors);
           if(!next)break;
           seenCursors.add(next);
           cursor=next;
-          await recordStage('sources','himalayas_feed','feed_normalized',
-            {provider:'himalayas',format:'remote_feed'},
-            {accepted:report.himalayas,format:'normalized_job'});
+
         }catch{report.failures++;break;}
       }
     }
@@ -192,8 +218,18 @@ Deno.serve(async (request:Request)=>{
         const result=await fetchJSON(boardEndpoint(cfg.provider,cfg.slug));
         cached.set(board.name,result);
         report.boards_scanned++;
-        const candidates=normalizeBoard(result,cfg.provider,cfg.slug,cfg.company_name);
-        for(const candidate of candidates.slice(0,MAX_ATS_JOBS_PER_BOARD)){
+        const audit=analyzeBoard(result,cfg.provider,cfg.slug,cfg.company_name);
+        const candidates=audit.jobs;
+        const shortlisted=candidates.slice(0,MAX_ATS_JOBS_PER_BOARD);
+        report.received+=audit.scanned;
+        report.normalized+=candidates.length;
+        report.filtered+=audit.scanned-candidates.length;
+        report.rejected_role+=audit.excluded.role;
+        report.rejected_source+=audit.excluded.source;
+        report.rejected_stale+=audit.excluded.stale;
+        report.not_selected+=Math.max(0,candidates.length-shortlisted.length);
+        const priorIngested=report.ats_jobs;
+        for(const candidate of shortlisted){
           const saved=await db.rpc('ci_ingest_ats_job',{
             p_provider:candidate.provider,p_board:candidate.board,
             p_source_job_id:candidate.sourceJobId,p_company:candidate.company,
@@ -209,8 +245,14 @@ Deno.serve(async (request:Request)=>{
                job_id:typeof saved.data==='string'?saved.data:'',
                saved:true,format:'canonical_job'},
               typeof saved.data==='string'?saved.data:undefined);
-          }else report.failures++;
+          }else{report.failures++;report.save_failures++;}
         }
+        await recordStage('ingestion','ats_normalizer','source_screened',
+          {provider:cfg.provider,board:cfg.slug,format:'provider_posting',received:audit.scanned},
+          {accepted:candidates.length,ingested:report.ats_jobs-priorIngested,
+           rejected:audit.scanned-candidates.length,rejected_role:audit.excluded.role,
+           rejected_source:audit.excluded.source,rejected_stale:audit.excluded.stale,
+           not_selected:candidates.length-shortlisted.length,format:'canonical_job'});
       }catch{report.failures++;}
     }
     // Deterministic official evidence checks; never infer Nigeria from "remote" alone.
