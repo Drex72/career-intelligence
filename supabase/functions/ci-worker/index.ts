@@ -10,6 +10,7 @@ import {classifyOfficialPosting,findOfficialJob,postingDescription,postingLocati
 import {classifyWorkFacts} from './work-facts.mjs';
 import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
 import {safePreview} from './telemetry.mjs';
+import {runPeople,runOutreach,runConversation} from './specialists.mjs';
 import {analyzeHimalayas,safeHimalayasCursor,isSoftwareRole} from './himalayas.mjs';
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
@@ -66,11 +67,19 @@ Deno.serve(async (request:Request)=>{
   const key=Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if(!url||!key)return response(503,{error:'Worker storage not configured'});
   const db=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
+  const role=typeof envelope.role==='string'?envelope.role:'legacy';
   let authorized=false;
   try{
-    authorized=checked(await db.rpc('ci_verify_worker_request',{
-      p_nonce:envelope.nonce,p_timestamp:envelope.timestamp,p_signature:envelope.signature
-    }))===true;
+    if(role==='legacy'){
+      authorized=checked(await db.rpc('ci_verify_worker_request',{
+        p_nonce:envelope.nonce,p_timestamp:envelope.timestamp,p_signature:envelope.signature
+      }))===true;
+    }else{
+      authorized=checked(await db.rpc('ci_verify_specialist_request',{
+        p_nonce:envelope.nonce,p_timestamp:envelope.timestamp,
+        p_signature:envelope.signature,p_role:role
+      }))===true;
+    }
   }catch{return response(503,{error:'Worker authorization temporarily unavailable'});}
   if(!authorized)return response(401,{error:'Invalid or replayed signed request'});
 
@@ -90,13 +99,15 @@ Deno.serve(async (request:Request)=>{
   }
   const report={remotive:0,himalayas:0,ats_jobs:0,boards_scanned:0,reviewed:0,verified_eligible:0,likely_eligible:0,unknown:0,ineligible:0,candidates:0,matched:0,
     attempts:0,failures:0,telemetry_failures:0,received:0,normalized:0,filtered:0,
-    rejected_role:0,rejected_source:0,rejected_stale:0,not_selected:0,save_failures:0};
+    rejected_role:0,rejected_source:0,rejected_stale:0,not_selected:0,save_failures:0,
+    people_processed:0,drafts_prepared:0,replies_classified:0};
   try{
     const run=checked(await db.from('ci_worker_runs')
-      .insert({state:'running'}).select('id').single());
+      .insert({state:'running',specialist_role:role==='legacy'?null:role}).select('id').single());
     runID=run.id;
     await recordStage('sources','signed_ci_worker','run_started',
-      {format:'signed_worker_request'},{status:'running'});
+      {format:'signed_worker_request',role},{status:'running'});
+    if(role==='legacy'||role==='discovery'){
     // One feed request per six hours, matching provider's published guidance.
     const allowed=checked(await db.rpc('ci_claim_feed_slot',{p_action:'remotive'}));
     if(allowed){
@@ -228,7 +239,6 @@ Deno.serve(async (request:Request)=>{
       const claimed=await db.rpc('ci_claim_ats_slot',{p_source_id:board.id});
       return !claimed.error&&claimed.data===true;
     },MAX_BOARDS_PER_RUN);
-    const cached=new Map<string,unknown>();
     for(const board of boards){
       const cfg=board.config;
       report.attempts++;
@@ -280,6 +290,9 @@ Deno.serve(async (request:Request)=>{
            not_selected:candidates.length-shortlisted.length,format:'canonical_job'});
       }catch{report.failures++;}
     }
+    }
+    const cached=new Map<string,unknown>();
+    if(role==='legacy'||role==='eligibility'){
     // Deterministic official evidence checks; never infer Nigeria from "remote" alone.
     const queue=rows(checked(await db.from('ci_eligibility_review_queue')
       .select('job_id').eq('state','pending').order('first_queued_at').limit(100)));
@@ -340,6 +353,8 @@ Deno.serve(async (request:Request)=>{
         }
       }catch{report.failures++;}
     }
+    }
+    if(role==='legacy'||role==='matching'){
     // Only approved, matching-safe Obsidian knowledge can unlock matching tasks.
     // A missing vault leaves the workflow awaiting approval rather than inventing skills.
     const documents=rows(checked(await db.from('ci_knowledge_documents')
@@ -390,11 +405,15 @@ Deno.serve(async (request:Request)=>{
         }
       }
     }
+    }
+    if(role==='people')report.people_processed=await runPeople(db,runID!,recordStage);
+    if(role==='outreach')report.drafts_prepared=await runOutreach(db,runID!,recordStage);
+    if(role==='conversation')report.replies_classified=await runConversation(db,runID!,recordStage);
     await recordStage('sources','signed_ci_worker','run_finished',
       {format:'worker_summary'},
       {status:report.failures?'partial':'completed',
        processed:report.ats_jobs+report.remotive+report.himalayas,
-       reviews:report.reviewed,failures:report.failures});
+       reviews:report.reviewed,failures:report.failures,role});
     checked(await db.from('ci_worker_runs').update({
       finished_at:new Date().toISOString(),
       state:report.failures?'partial':'completed',details:report
