@@ -152,7 +152,7 @@ Deno.serve(async (request:Request)=>{
           {provider:'remotive',format:'remote_feed',received:sourceRows.length},
           {accepted:remotiveNormalized,ingested:report.remotive,rejected:sourceRows.length-remotiveNormalized,
            rejected_role:report.rejected_role,rejected_source:report.rejected_source,
-           format:'normalized_job'});
+           rejected_stale:report.rejected_stale,format:'normalized_job'});
       }catch{report.failures++;}
     }
     // Himalayas API refreshes once daily. Respect its shared unauthenticated
