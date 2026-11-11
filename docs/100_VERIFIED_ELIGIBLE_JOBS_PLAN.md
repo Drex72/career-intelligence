@@ -1,56 +1,85 @@
-# Delivery plan: 100 genuinely verified, suitable jobs per day
+# Review and refined delivery plan: 100 verified, suitable jobs per day
 
-**Goal:** Sustain a daily batch of **100 new, open, recent, job-specific-eligibility-verified, user-preference-compatible, nonduplicate roles**, not 100 collected leads. Source volume, preliminary role matches, and likely eligibility do **not** count as delivered success.
+## Definition of done
 
-**Starting baseline (2026-11-11, production):** 24 active ATS sources; 42 stored roles; 26 official eligibility assessments (1 verified, 4 likely, 21 unknown); 20 approved knowledge notes but **zero** scored matches; daily batches target 100 and delivered 0 today (1 yesterday). Six-hour unattended worker and 07:00 WAT batch are active. Latest worker inspected 286 postings, passed four initial screening; zero fresh eligibility reviews or matching outcomes. Existing batch selects no more than one role per company over account lifetime, contrary to the explicit job-based goal.
+The product target is **100 genuinely different, newly delivered roles per Africa/Lagos calendar day** that have ALL of:
 
-## Non-negotiable acceptance criteria
+- **Fresh, live employer posting:** real open position, within the configured freshness policy, attributed to an official source and canonical URL. Idempotent dedup across ATS providers, role URLs and days.
+- **Verified personal eligibility:** current job-specific official evidence that a Nigeria-based applicant can take the remote role **or** that the employer sponsors relocation/work authorization applicable to the candidate. Worldwide wording, a generic company sponsorship policy, and inferred eligibility do not count.
+- **Proper job fit:** allowed job family, actual seniority/graduate eligibility, location/work model and sponsorship constraints, plus a meaningful competency/requirements assessment against approved experience. A keyword-only title/location overlap is **not** a validated fit assessment.
+- **Auditable explanation:** store source attribution, relevant official job requirements, evidence excerpt and expiry, matching version and rationale, decision reasons and rejection reasons.
+- **Not previously delivered:** deduplicate jobs by canonical posting identity, not only by randomly generated database ID. Distinct positions at the same company may both qualify.
 
-1. 100 means 100 **distinct role IDs** per Africa/Lagos day, never padding with unverified, stale, previously delivered or preference-incompatible jobs. Same company may have distinct roles, but repeat roles do not count.
-2. "Verified" requires current, job-scoped employer/official evidence that the candidate can lawfully apply from Nigeria **or** supported relocation/visa sponsorship evidence scoped to the candidate's circumstances. General worldwide wording remains likely, not verified.
-3. "Proper" means matching the user's configured families, seniority, work mode and sponsorship; role requirements are compared with approved knowledge, with an explainable fit score. A listing missing required facts is escalated, not misrepresented.
-4. Each delivery carries an official source URL, evidence and expiry, original posting date, fit rationale, and deduplication key.
-5. The batch can be short and expose a visible shortfall. Never weaken gates to show 100.
-6. The entire discovery → eligibility → matching → batch transition is idempotent, recoverable and observable; quality regressions stop promotion.
+If fewer than 100 pass every gate, the system must deliver the genuine shortfall, explain which step is preventing 100 and avoid padding.
 
-## Milestone A — Repair correctness and unblock handoffs (in progress)
+## Review of Milestone 1 (2026-11-11)
 
-- [x] Identify production mismatch: `ci_knowledge_versions.revision = ci_knowledge_documents.content_sha`, not `git_sha`. Both the worker retrieval and SQL handoff readiness used the incorrect join.
-- [x] Implement matching worker version lookup fix and SQL handoff repair (migration 0032).
-- [x] Remove lifetime **company** exclusion in delivery while preserving lifetime **job** exclusion and the company ledger; one employer can have multiple genuinely distinct suitable jobs.
-- [ ] Validate migration on isolated PostgreSQL and production, check RLS/permissions; deploy worker and verify a previously awaiting-approval matching task becomes pending then completed with real approved knowledge.
-- [ ] Add source evidence assertions and inspect whether the matching score reflects real role requirements rather than only job title and location.
+**Proven:** matching worker now retrieves approved documents by `content_sha`; SQL handoff unblocked; one real matching task completed; distinct jobs at the same company are no longer excluded solely by company ledger; signed worker v15 and database migration 0032 deployed. Permissions regression checks passed.
 
-## Milestone B — Scale trustworthy discovery supply
+**Not proven:** the first real match was score **0**, with empty matched and gap arrays. Existing worker only matches skills in **job title and remote_text**, not actual qualifications. A completed task therefore does not prove relevance.
 
-- [ ] Build a measurable source portfolio: official employer ATS, eligible country filters and additional permitted public APIs. Every board needs a current official vacancy as proof; don't confuse valid ATS hosting with evidence of Nigeria eligibility.
-- [ ] Rank board selection by yield of **fresh, eventually verified** roles, not volume. Monitor board failures, 429s, stale posting rates and per-source acceptance.
-- [ ] Preserve source-provider API quotas and keep concurrency bounded. Raise bounded scan/review capacity only after measuring actual latency, cost, platform quotas and retries.
-- [ ] Expose distinct new jobs, screened-out examples, review-pending, verified, matched and delivered counts as a reconciled per-run funnel.
-- [ ] Validate real-life supply: collect at least 7 days of attributable conversion statistics; determine whether 100 verified/day is feasible given country and visa restrictions before claiming capacity.
+**Critical finding A — delivery bypasses proper-fit gate.** `ci_generate_daily_batch` uses a LEFT JOIN for `ci_job_matches` and orders with `coalesce(m.score,0)`; the WHERE clause does not require any match, evidence-backed requirements assessment, minimum valid score or approved knowledge revision. This means the database can deliver an eligible-but-unsuitable job. **Block promotion of the 100-verified job promise until fixed**.
 
-## Milestone C — Evidence-backed eligibility for Nigeria + relocation
+**Critical finding B — preferences are effectively unrestricted.** Production `ci_discovery_preferences.daily_target=100`, but `job_families=['any']`, `seniority_levels=['any']`, `work_modes=['any']`, and `sponsorship='any'`. These are settings, not user-confirmed suitability. Owner must select a sufficiently specific *allowed* family/level/work model or define evidence-backed policy defaults based on approved career preferences. Do not silently rewrite owner choices.
 
-- [ ] Independently verify job-specific Nigeria-based employment and visa/relocation sponsorship on official employer evidence. Explicit exclusions override generic remote or sponsorship statements.
-- [ ] Add source-backed hiring geography, visa support, citizenship/residency restrictions, document freshness and evidence policy version fields; permit reviews/escalation on ambiguity.
-- [ ] Queue all appropriate freshly ingested ATS jobs for verified evidence checks; measure failures and missed jobs separately.
-- [ ] Scale daily review throughput above 100 with bounded parallelism and scheduling, retry/backoff and expiry refresh, but never infer positive status from unknown.
+**Critical finding C — limited hiring-country evidence.** `classifyOfficialPosting` only verifies explicit Nigeria support; `worldwide` stays likely. Visa/relocation eligibility needs a separately verified policy with candidate-specific restrictions and expiry. Never upgrade to verified on generic sponsorship claims.
 
-## Milestone D — Fit matching and dependable scheduling
+**Critical finding D — insufficient fresh supply.** 24 active ATS boards, 42 stored roles, 1 verified eligible, and recent worker acceptance rates are far below the requested delivery target. The 100 target is an *objective*, not a currently achievable operating capability. Do not estimate supply linearly from a small sample.
 
-- [ ] Parse actual job responsibilities/qualifications from official postings; score against approved knowledge with requirements evidence, seniority and exclusions.
-- [ ] Ensure every verified role gets an idempotent matching task and enforce required knowledge, scoring and preference gates before delivery.
-- [ ] Run daily batches **after** verified/matched work, not concurrently with the 06:00 UTC scheduled discovery run. Add catch-up attempts and an under-target alert with reasons.
-- [ ] Reconcile unique job IDs and optional per-company diversity constraints without imposing an accidental lifetime employer ban.
+**Important finding E — job-level identity and stale data.** A unique internal job ID alone does not prevent the same vacancy appearing from two providers. Need canonical URL normalization, employer identity matching, title/location discrimination, posting IDs and adversarial duplicate tests.
 
-## Milestone E — Autonomous people/outreach/conversations (separate success metric)
+**Important finding F — completion order and failure budget.** Scheduled discovery and batch generation are time-driven and can race. Four independent handoffs are required: ingest → eligibility → verified fit → delivery, with retry, terminal failure, and backlog alerts. "Reviewed" can process old queued jobs, not necessarily the current run's new cohort.
 
-- [ ] Enable reliable, citation-backed employer contact discovery for eligible, relevant roles; no invented contacts.
-- [ ] Generate reviewable outreach drafts; integrate any actual Gmail sending only with the owner's explicit standing or per-message authorization.
-- [ ] Connect reply monitoring and follow-up queues with suppression, revocation, retries, reconciliation and kill switches.
+## Refined milestones / execution order
 
-## Metrics / release gates
+### P0-1: Correctness first (required before any 100/day release claim)
 
-Daily funnel must disclose: source postings **seen**; initial role/source/date **passed**; unique stored roles; queue submissions; verified Nigeria or confirmed eligible relocation; verified-but-stale; verified-but-rejected by user preferences; matched and scored; delivered distinct jobs; target shortfall; provider errors and rate limits. Minimum correctness tests: duplicate job never delivered twice, two distinct verified roles at one company remain eligible, stale/unverified/unknown excluded, no approved knowledge means no fabricated score, and no automatic Gmail action.
+- [x] Repair knowledge version join and verified-job task handoff.
+- [x] Remove accidental lifetime company-only dedup, retaining job ID ledger.
+- [ ] Replace the LEFT JOIN delivery loophole with a **fail-closed requirement** for a recent, completed, job-requirements-based fit assessment and owner preferences version. Existing keyword-overlap-v1 records should be labelled preliminary and **must not count as validated job fit**.
+- [ ] Collect approved, user-specific allowed role families, levels and remote/relocation preferences; keep existing `any` settings visible until user approves their replacement.
+- [ ] Confirm official job URL, job-scoped evidence and fit version in each deliverable; add test proving a verified yet unscored/mismatched role cannot be delivered.
+- [ ] Verify merge and deployment with live count queries and reject "complete" claims based on only a green CI.
 
-**Current commitment:** Milestone A fixes the correctness bugs and proves a real matching handoff; it cannot by itself produce 100 verified/day. Milestones B–D are necessary supply and quality work. A benchmark must demonstrate the target before marking it achieved.
+### P0-2: Real requirements matching
+
+- [ ] Parse required years, seniority, languages, location, degree/student eligibility, work model and skill requirements from the *actual official job description*, never title/location alone.
+- [ ] Use scored, traceable evidence from approved experience; assess mandatory requirements separately from preferences. Represent missing requirements as `unknown/needs_review`, not zero or guaranteed eligible.
+- [ ] Version the evaluation rubric. Calibrate on a manually labeled set including internships, graduate roles, experienced roles, on-site abroad, remote from Nigeria, relocation sponsorship and hard exclusions.
+- [ ] Target high precision **before** throughput; track false-positive rate, false-negative rate and missing-evidence rate, not just average score.
+
+### P0-3: Real eligibility verification
+
+- [ ] Verify Nigeria work authorization or a *job-specific*, applicable relocation/visa sponsorship pathway; check country restrictions, citizenship, employment entity, seniority and any student/graduate restrictions.
+- [ ] Persist the official excerpt, URL, observation timestamp, expiry, policy version, specific claim and contradiction checks. Generic remote ≠ Nigeria eligibility; generic sponsorship ≠ guaranteed relocation.
+- [ ] Scale the review backlog with bounded concurrency, provider quotas and retries. Do not count a posting in `unknown` or `likely_eligible` as verified.
+
+### P0-4: Supply expansion grounded in yield
+
+- [ ] Build a broad vetted employer/source roster using current official job openings and employer identities. Source approval is separate from job eligibility.
+- [ ] Track per source: fetched, parsed, fresh, unique, verified, matched, delivered, failures, 429s and update lag.
+- [ ] Rank scans and add capacity by **verified eligible suitable yield per source/hour**, not just raw titles scraped.
+- [ ] Observe at least seven representative days, then calculate the required daily reviewed inventory from measured end-to-end conversion. Validate the 100/day claim statistically against actual source market supply.
+
+### P1: Reliable autonomous operation
+
+- [ ] Trigger matching only after completed evidence verification; trigger a catch-up daily batch only after eligible matches are available, then re-run safely on retries.
+- [ ] Queue jobs with concurrency leases, idempotent transitions, deadlines and poison-job handling; report blocking stage and backlog age.
+- [ ] Send a shortfall report when fewer than 100 verified suitable unique roles qualify; never silently mark a 3-item batch as "100 achieved".
+- [ ] Keep people research, outreach sending and Gmail conversation automation **out of the critical delivery path**; obey explicit owner authorization for external messaging.
+
+## Acceptance tests (must be passing on disposable DB and observed live)
+
+1. Unverified, unknown, likely-only, expired-evidence, already-delivered and stale jobs cannot enter the verified daily batch.
+2. An official Nigeria-eligible posting with **no validated requirements fit**, 0-score title-only match or incompatible mandatory requirements cannot enter the verified batch.
+3. Verified, matched, genuinely distinct positions from one employer may both qualify, but the same job across two ATS providers is delivered once.
+4. A role restricted to applicants in the US or requiring unsupported citizenship is rejected even when it contains "remote" or broad visa policy language.
+5. A plausible visa-sponsoring employer without job-specific applicant-eligibility evidence is `needs_review`, not `verified_eligible`.
+6. The independently rechecked production total equals the dashboard total: exact job IDs, evidence state, matching policy version and owner preference version; 100 is only achieved when all 100 satisfy the same gate.
+7. During an upstream outage, the system retries safely, reports an honest shortfall and does not lower thresholds, create artificial jobs or send any email.
+
+## Operational dashboard contract
+
+Display (per Africa/Lagos day) a **true verified-qualified delivery counter 0–100**, a separate raw-discovery counter, the full conversion funnel and shortfall reasons. Each job must show *why this employer can hire the candidate*, *why the candidate fits*, exact official source links and expiry. Agent statuses come from persisted execution records; no simulated claims.
+
+**Current status:** Milestone 1 operational plumbing has been fixed; the daily 100 verified proper-job target remains unmet. This document distinguishes proven pipeline execution from unproven job-quality guarantees.
