@@ -41,6 +41,19 @@ revoke all on sequence public.ci_worker_pool_waves_id_seq from public,anon,authe
 grant select,insert on public.ci_worker_pool_waves to service_role;
 grant usage,select on sequence public.ci_worker_pool_waves_id_seq to service_role;
 
+-- Pure policy function: at 0-79 existing deliveries max 10; at 80-99 max 5;
+-- at target launch nothing. This is scheduling progress, not fit-quality proof.
+create or replace function public.ci_worker_pool_ceiling(
+  p_delivered integer,p_target integer,p_max integer,p_reduced integer,p_threshold integer)
+returns integer language sql immutable strict as $ci_ceiling$
+  select case when p_delivered>=p_target then 0
+    when p_delivered>=p_threshold then p_reduced else p_max end
+$ci_ceiling$;
+revoke all on function public.ci_worker_pool_ceiling(integer,integer,integer,integer,integer)
+  from public,anon,authenticated;
+grant execute on function public.ci_worker_pool_ceiling(integer,integer,integer,integer,integer)
+  to service_role;
+
 -- Computes demand without making any external network request.
 -- Counts of already-delivered roles are only a scheduling proxy; they are NOT
 -- proof of the future, stricter requirements-based fit gate.
@@ -90,9 +103,9 @@ begin
   select count(*) into current_active from ci_worker_runs
      where state='running' and started_at>now()-interval '4 minutes';
 
-  ceiling:=case when cfg.enabled is false or gap=0 then 0
-     when delivered>=cfg.reduce_after_delivered then cfg.reduced_instances
-     else cfg.max_instances end;
+  ceiling:=case when cfg.enabled then ci_worker_pool_ceiling(
+    delivered,target_total,cfg.max_instances,cfg.reduced_instances,cfg.reduce_after_delivered)
+    else 0 end;
   -- Each ci-worker currently handles <=6 ATS boards, <=8 eligibility
   -- reviews and <=3 matching tasks. The demand is the MAX of stage needs,
   -- not their SUM, because one invocation serves all three.
@@ -167,20 +180,3 @@ $ci_pool_run$;
 revoke all on function public.ci_run_adaptive_worker_pool(boolean) from public,anon,authenticated;
 grant execute on function public.ci_run_adaptive_worker_pool(boolean) to service_role;
 
--- Activation occurs AFTER the worker has been deployed. An adaptive pool
--- replaces the former six-hour single-invocation schedule.
-do $ci_schedule_pool$
-begin
-  if exists(select 1 from pg_extension where extname='pg_cron')
-     and exists(select 1 from pg_extension where extname='pg_net') then
-    if coalesce(current_setting('cron.timezone',true),'GMT') not in ('GMT','UTC','Etc/UTC') then
-      raise exception 'Career Intelligence scheduler requires UTC/GMT';
-    end if;
-    if exists(select 1 from cron.job where jobname='ci-unattended-public-research-6h') then
-      perform cron.unschedule('ci-unattended-public-research-6h');
-    end if;
-    perform cron.schedule('ci-adaptive-worker-pool-15m','*/15 * * * *',
-      'select public.ci_run_adaptive_worker_pool(false)');
-  end if;
-end;
-$ci_schedule_pool$;
