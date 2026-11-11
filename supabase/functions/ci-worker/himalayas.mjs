@@ -15,10 +15,11 @@ function safeURL(input){
     return url;
   }catch{return null;}
 }
-export function normalizeHimalayas(payload,now=Date.now()){
+export function analyzeHimalayas(payload,now=Date.now()){
   const jobs=payload?.jobs;
   if(!Array.isArray(jobs))throw new Error('Unexpected Himalayas API format');
   const result=[];
+  const excluded={role:0,source:0,stale:0};
   for(const raw of jobs.slice(0,20)){
     const title=String(raw?.title||'').trim();
     const company=String(raw?.companyName||'').trim();
@@ -28,11 +29,12 @@ export function normalizeHimalayas(payload,now=Date.now()){
     const publishedMs=published*1000;
     const restrictions=Array.isArray(raw?.locationRestrictions)?
       raw.locationRestrictions.map(x=>String(x?.alpha2||x?.name||'')).filter(Boolean).slice(0,30):[];
-    if(!isSoftwareRole(title)||
-       company.length<2||company.length>180||!source||!application||
+    if(!isSoftwareRole(title)){excluded.role++;continue;}
+    if(company.length<2||company.length>180||!source||!application||
        source.hostname!=='himalayas.app'||!/^\/companies\/[A-Za-z0-9_-]+\/jobs\/[A-Za-z0-9_-]+$/.test(source.pathname)||
-       source.search||source.hash||!Number.isSafeInteger(published)||!Number.isFinite(publishedMs)||
-       publishedMs<now-7*86400000||publishedMs>now+86400000)continue;
+       source.search||source.hash){excluded.source++;continue;}
+    if(!Number.isSafeInteger(published)||!Number.isFinite(publishedMs)||
+       publishedMs<now-7*86400000||publishedMs>now+86400000){excluded.stale++;continue;}
     // No inferred legal eligibility from a worldwide tag or country metadata.
     result.push({
       guid:source.origin+source.pathname,
@@ -45,7 +47,10 @@ export function normalizeHimalayas(payload,now=Date.now()){
       description:String(raw?.description||'').slice(0,30000)
     });
   }
-  return result;
+  return {jobs:result,scanned:jobs.slice(0,20).length,excluded};
+}
+export function normalizeHimalayas(payload,now=Date.now()){
+ return analyzeHimalayas(payload,now).jobs;
 }
 
 /** Cursor tokens are opaque. URL-encode; never turn provider data into request URLs. */
