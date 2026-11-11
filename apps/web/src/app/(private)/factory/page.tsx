@@ -24,7 +24,7 @@ type Flow={
  jobs:{id:string;company:string;title:string}[];
  stage_counts:{registry?:number};latest_batch:{delivered:number;target:number}|null;
 };
-type Breakdown={provider:string;board:string;received:number;accepted:number;ingested:number;
+type Breakdown={provider:string;board:string;company:string;received:number;accepted:number;ingested:number;
  rejected:number;role:number;source:number;stale:number;cap:number;time:string;id:string};
 const number=(n:number|null|undefined)=>n==null?'—':n.toLocaleString();
 const fullDate=(s:string)=>new Date(s).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'});
@@ -70,7 +70,7 @@ export default function DiscoveryMonitor(){
  const data=run?.details??null;
  const records=useMemo(()=>resource.data?.events.filter(e=>e.kind==='instrumented'&&e.run_id===run?.id)??[],[resource.data?.events,run?.id]);
  const sources=useMemo<Breakdown[]>(()=>records.filter(e=>e.type==='source_screened').map(e=>({
-  id:e.id,provider:String(e.input.provider||'ATS'),board:String(e.input.board||''),
+  id:e.id,provider:String(e.input.provider||'ATS'),board:String(e.input.board||''),company:String(e.input.company||''),
   received:safeNum(e.input.received),accepted:safeNum(e.output.accepted),ingested:safeNum(e.output.ingested),
   rejected:safeNum(e.output.rejected),role:safeNum(e.output.rejected_role),
   source:safeNum(e.output.rejected_source),stale:safeNum(e.output.rejected_stale),
@@ -140,13 +140,20 @@ export default function DiscoveryMonitor(){
     {sources.length?<div className="disc-sources-list">{sources.map(source=><div className="disc-source-block" key={source.id}>
       <button className="disc-source-row" aria-expanded={expandedSource===source.id} onClick={()=>openSource(source.id)} type="button">
         <span className="disc-source-symbol">{source.provider.slice(0,1).toUpperCase()}</span>
-        <span className="disc-source-name"><strong>{source.board||source.provider}</strong><small>{source.provider} · {source.received} inspected</small></span>
+        <span className="disc-source-name"><strong>{source.company||source.board||source.provider}</strong><small>{source.provider}{source.company&&source.board?' · '+source.board:''} · {source.received} inspected</small></span>
         <span className="disc-source-count">{source.ingested} stored</span>
         <span className="disc-source-chevron" aria-hidden="true">{expandedSource===source.id?'⌃':'⌄'}</span>
       </button>
       {expandedSource===source.id&&<div className="disc-source-expand">
         <div><span>Inspected</span><b>{source.received}</b></div><div><span>Passed</span><b>{source.accepted}</b></div><div><span>Rejected</span><b>{source.rejected}</b></div><div><span>Stored</span><b>{source.ingested}</b></div>
         <p>Rejected: {source.role} role mismatch · {source.source} invalid source · {source.stale} outside date window. {source.cap?source.cap+' passed the rules but exceeded the processing cap.':''}</p>
+        {records.filter(e=>e.type==='posting_filtered'&&String(e.input.provider||'')===source.provider&&String(e.input.board||'')===source.board).slice(0,3).length>0&&
+         <div className="disc-source-examples"><strong>Examples of screened-out postings</strong>
+          {records.filter(e=>e.type==='posting_filtered'&&String(e.input.provider||'')===source.provider&&String(e.input.board||'')===source.board).slice(0,3).map(e=><div key={e.id}>
+           <span title={String(e.input.title||'')}>{String(e.input.title||'Untitled posting')}</span>
+           <small>{String(e.output.reason||'filtered')}</small>
+          </div>)}
+         </div>}
       </div>}
      </div>)}</div>:<div className="disc-empty">{hasFunnel?'No per-source data is available yet. The worker may be waiting on provider rate limits.':'Source-level breakdown was not collected for this run.'}</div>}
    </section>
