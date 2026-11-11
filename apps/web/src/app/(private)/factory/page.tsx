@@ -7,6 +7,7 @@ import {StateNotice} from '@/components/ResourceTable';
 import {useCareerSession} from '@/components/AuthGate';
 import {useResource} from '@/components/useResource';
 import {ciFetch} from '@/lib/api';
+import {FlowRecordDiff} from '@/components/FlowRecordDiff';
 import './factory.css';
 
 type Stage='sources'|'registry'|'ingestion'|'eligibility'|'matching'|'ranking'|'delivery'|'knowledge'|'people'|'outreach'|'conversation';
@@ -94,7 +95,7 @@ export default function FactoryFlow(){
  const [lineage,setLineage]=useState<JobLineage|null>(null);
  const [lineageError,setLineageError]=useState<string|null>(null);
  const [lineageBusy,setLineageBusy]=useState(false);
- const [zoom,setZoom]=useState(1);
+ const [zoom,setZoom]=useState(.86);
  const [agentExpanded,setAgentExpanded]=useState(true);
  const [feedExpanded,setFeedExpanded]=useState(true);
  const scrollRef=useRef<HTMLDivElement>(null);
@@ -196,7 +197,7 @@ export default function FactoryFlow(){
     <div className="factory-v2-zoom" aria-label="Chart zoom controls">
      <button type="button" aria-label="Zoom out" onClick={()=>setZoom(v=>Math.max(.7,Number((v-.1).toFixed(2))))}>−</button><span>{Math.round(zoom*100)}%</span><button type="button" aria-label="Zoom in" onClick={()=>setZoom(v=>Math.min(1.3,Number((v+.1).toFixed(2))))}>+</button>
     </div>
-    <button className="factory-v2-ghost" type="button" onClick={()=>{setZoom(1);scrollRef.current?.scrollTo({left:0,behavior:'smooth'});}}>Fit</button>
+    <button className="factory-v2-ghost" type="button" onClick={()=>{setZoom(.86);scrollRef.current?.scrollTo({left:0,behavior:'smooth'});}}>Fit</button>
    </div>
   </header>
   <div className="factory-v2-workbench">
@@ -308,8 +309,7 @@ export default function FactoryFlow(){
        {inspectorTab==='lineage'&&<div className="factory-v2-snapshot-tabs" role="group" aria-label="Recorded job transformation stages">{(lineage?.snapshots||[]).map((s,i)=><button type="button" className={jobSnapshot===s?'active':''} key={s.stage+i} onClick={()=>setSelectedStage(s.stage)}>{s.stage.replaceAll('_',' ')}</button>)}{lineageBusy&&<span>Loading lineage…</span>}</div>}
        <div className="factory-v2-data-meta"><span>{inspectorTab==='event'?(currentEvent?currentEvent.type.replaceAll('_',' ')+' · '+when(currentEvent.time):'No event selected'):(jobSnapshot?jobSnapshot.stage+' · '+when(jobSnapshot.time):'No saved snapshot for this job')}</span><span>{inspectorTab==='event'&&currentEvent?.kind==='provenance'?'Historical record, not live agent output':inspectorTab==='event'?'Recorded event':'Persisted job data'}</span></div>
        {lineageError&&inspectorTab==='lineage'&&<p className="error-message">{lineageError}</p>}
-       <div className="factory-v2-json-pair"><div className="factory-v2-codebox"><div className="factory-v2-codehead"><span>INPUT / BEFORE</span><span>JSON</span></div><pre>{pretty(payloadBefore)}</pre></div><div className="factory-v2-codebox after"><div className="factory-v2-codehead"><span>OUTPUT / AFTER</span><span>JSON</span></div><pre>{pretty(payloadAfter)}</pre></div></div>
-       <p className="factory-v2-payload-note">Only stored, allowlisted metadata is shown. Raw ATS responses and private notes are not replayed.</p>
+       <FlowRecordDiff before={payloadBefore} after={payloadAfter}/>
      </section>
     </div>
    </aside>
