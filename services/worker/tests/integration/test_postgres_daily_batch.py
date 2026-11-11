@@ -40,3 +40,37 @@ def test_batch_function_is_not_callable_by_browser_roles():
         result=conn.execute(
           "select has_function_privilege('anon','ci_generate_daily_batch(uuid,date,integer)','EXECUTE'),has_function_privilege('authenticated','ci_generate_daily_batch(uuid,date,integer)','EXECUTE')").fetchone()
         assert result==(False,False)
+
+@pytest.mark.skipif(not os.environ.get('PG_TEST_DSN'), reason='isolated PostgreSQL required')
+def test_distinct_verified_roles_at_same_employer_can_both_be_delivered_once():
+    """The 100/day goal counts distinct eligible job IDs, not lifetime-new companies."""
+    import psycopg
+    owner=uuid4()
+    slug=uuid4().hex[:10]
+    with psycopg.connect(os.environ['PG_TEST_DSN'],autocommit=True) as conn:
+        company=conn.execute("""insert into ci_companies(normalized_name,legal_name)
+          values(%s,%s) returning id""",('batch-multi-'+slug,'Multi Role '+slug)).fetchone()[0]
+        roles=[]
+        for n,title in enumerate(('Software Engineer','Backend Engineer'),1):
+            url='https://example.org/jobs/'+slug+'-'+str(n)
+            job=conn.execute("""insert into ci_jobs(
+              company_id,title,apply_url,canonical_apply_url,status,published_at)
+              values(%s,%s,%s,%s,'open',now()) returning id""",
+              (company,title,url,url)).fetchone()[0]
+            conn.execute("""insert into ci_eligibility_evidence
+              (job_id,source_url,source_kind,excerpt,excerpt_hash,scope,claim,confidence)
+              values(%s,%s,'official_job','Hiring Nigeria candidates',%s,
+              'job','Nigeria eligible','verified')""",
+              (job,url,str(uuid4())))
+            conn.execute("""insert into ci_eligibility_assessments
+              (job_id,status,confidence,reasons,contradictions,policy_version)
+              values(%s,'verified_eligible',0.95,'[]'::jsonb,'[]'::jsonb,'test')""",(job,))
+            roles.append(job)
+        assert conn.execute("select ci_generate_daily_batch(%s,%s,100)",
+          (owner,date.today())).fetchone()[0]==2
+        assert conn.execute("""select count(*) from ci_delivered_companies
+          where owner_user_id=%s and company_id=%s""",(owner,company)).fetchone()[0]==1
+        assert conn.execute("""select count(*) from ci_delivered_jobs
+          where owner_user_id=%s and job_id=any(%s)""",(owner,roles)).fetchone()[0]==2
+        assert conn.execute("select ci_generate_daily_batch(%s,%s,100)",
+          (owner,date.today()+timedelta(days=1))).fetchone()[0]==0
