@@ -345,11 +345,11 @@ Deno.serve(async (request:Request)=>{
       const versionResult=await db.from('ci_knowledge_versions')
         .select('document_id,revision,body')
         .in('document_id',documents.map(d=>d.id))
-        .in('revision',documents.map(d=>d.git_sha)).limit(150);
+        .in('revision',documents.map(d=>d.content_sha)).limit(150);
       if(versionResult.error)throw new Error('approved knowledge revision retrieval failed');
       const versions=rows(versionResult.data);
       const approved=documents.flatMap(d=>{
-        const version=versions.find(v=>v.document_id===d.id&&v.revision===d.git_sha);
+        const version=versions.find(v=>v.document_id===d.id&&v.revision===d.content_sha);
         return version&&typeof version.body==='string'&&version.body.trim()
           ?[{path:d.path,content_sha:d.content_sha,body:version.body.slice(0,8000)}]:[];
       });
