@@ -11,10 +11,11 @@ export function classifyReply(text){
  return 'other';
 }
 export function safeVerifiedDomain(domain){
- return typeof domain==='string'&&domain.length<=180&&
- /^[a-z0-9](?:[a-z0-9-]*\.)+[a-z]{2,24}$/i.test(domain)&&
- !/(?:^|\.)(?:localhost|local|internal|test|example|invalid|onion)$/i.test(domain)&&
- !/(?:^|\.)(?:localhost|local|internal|test|example|invalid|onion)\./i.test(domain);
+ if(typeof domain!=='string'||domain.length<4||domain.length>180)return false;
+ const labels=domain.split('.');
+ if(labels.length<2||! /^[a-z]{2,24}$/i.test(labels.at(-1)))return false;
+ if(['local','localhost','internal','test','example','invalid','onion'].includes(labels.at(-1).toLowerCase()))return false;
+ return labels.every(x=>/^(?:[a-z0-9]|[a-z0-9][a-z0-9-]{0,61}[a-z0-9])$/i.test(x));
 }
 export function extractOfficialPeople(html,domain){
  if(typeof html!=='string'||html.length>1024*1024||!safeVerifiedDomain(domain))return [];
