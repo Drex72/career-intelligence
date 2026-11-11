@@ -30,11 +30,12 @@ function published(value){
   const d=typeof value==='number'?new Date(value):new Date(value);
   return Number.isFinite(d.getTime())?d.toISOString():null;
 }
-export function normalizeBoard(payload,provider,slug,company,now=Date.now()){
+export function analyzeBoard(payload,provider,slug,company,now=Date.now()){
   if(!validBoard({provider,slug,company}))throw new Error('Invalid ATS board');
   const rows=Array.isArray(payload)?payload:Array.isArray(payload?.jobs)?payload.jobs:undefined;
   if(!rows)throw new Error('Invalid ATS payload');
   const results=[];
+  const excluded={role:0,source:0,stale:0};
   for(const row of rows.slice(0,100)){
     const title=String(provider==='lever'?row?.text:row?.title||'').trim();
     const id=String(row?.id||'');
@@ -46,9 +47,13 @@ export function normalizeBoard(payload,provider,slug,company,now=Date.now()){
     const remote=provider==='greenhouse'?(row?.location?.name||''):
       provider==='lever'?(row?.workplaceType||''):
       row?.isRemote===true?'Remote':'';
-    if(!titles.test(title)||title.length>250||!/^[A-Za-z0-9_-]{1,150}$/.test(id)||!url)continue;
-    if(pub&&(new Date(pub).getTime()>now+86400000 || new Date(pub).getTime()<now-30*86400000))continue;
+    if(!titles.test(title)||title.length>250){excluded.role++;continue;}
+    if(!/^[A-Za-z0-9_-]{1,150}$/.test(id)||!url){excluded.source++;continue;}
+    if(pub&&(new Date(pub).getTime()>now+86400000 || new Date(pub).getTime()<now-30*86400000)){excluded.stale++;continue;}
     results.push({provider,board:slug,sourceJobId:id,company,title,url,publishedAt:pub,remoteText:String(remote).slice(0,500)});
   }
-  return results;
+  return {jobs:results,scanned:rows.slice(0,100).length,excluded};
+}
+export function normalizeBoard(payload,provider,slug,company,now=Date.now()){
+ return analyzeBoard(payload,provider,slug,company,now).jobs;
 }
