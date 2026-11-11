@@ -1,5 +1,6 @@
 /** Strict request and execution budgets for the unsigned-JWT, HMAC-gated worker. */
 export const MAX_BODY_BYTES=1500;
+export const SPECIALIST_ROLES=Object.freeze(['discovery','eligibility','matching','people','outreach','conversation']);
 export const MAX_BOARDS_PER_RUN=6;
 export const MAX_REVIEWS_PER_RUN=8;
 export const MAX_ATS_JOBS_PER_BOARD=40;
@@ -10,7 +11,8 @@ export function validEnvelope(payload){
     Number.isSafeInteger(payload.timestamp) &&
     typeof payload.signature==='string' &&
     /^[0-9a-f]{64}$/.test(payload.signature) &&
-    Object.keys(payload).length===3;
+    (Object.keys(payload).length===3 ||
+      (Object.keys(payload).length===4 && SPECIALIST_ROLES.includes(payload.role)));
 }
 export function selectDueSources(sources, limits, now=Date.now(), maxCandidates=MAX_BOARDS_PER_RUN){
   const lastRun=new Map((limits||[]).map(item=>[item.action,Date.parse(item.last_run_at)]));

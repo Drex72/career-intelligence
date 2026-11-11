@@ -22,12 +22,19 @@ type PoolWave={id:number;observed_at:string;target:number;already_delivered:numb
  concurrency_ceiling:number;active_count:number;due_boards:number;pending_reviews:number;
  pending_matches:number;desired_instances:number;dispatched:number;decision:string};
 type PoolInfo={config:{enabled:boolean;max_instances:number;reduced_instances:number;reduce_after_delivered:number;min_wave_interval_seconds:number}|null;waves:PoolWave[]};
+type SpecialistRole='discovery'|'eligibility'|'matching'|'people'|'outreach'|'conversation';
+type SpecialistLane={role:SpecialistRole;queued:number;active:number;desired:number;spawn:number;throughput_per_run:number;health_factor:number};
+type SpecialistRun={id:string;role:SpecialistRole;state:string;started_at:string;finished_at:string|null;processed:number;failures:number};
+type SpecialistInfo={config:{enabled:boolean;active_budget:number;dispatch_budget:number;interval_seconds:number}|null;
+ waves:{id:number;observed_at:string;decision:string;total_launched:number;plan:{roles:SpecialistLane[];active_total:number;active_budget:number};dispatched:Record<string,number>}[];
+ runs:SpecialistRun[]};
 type Flow={
  observed_at:string;poll_interval_ms:number;events:Trace[];runs:Run[];
  roles:{role:string;latest_state:string;active:boolean;latest_at:string|null}[];
  jobs:{id:string;company:string;title:string}[];
  stage_counts:{registry?:number};latest_batch:{delivered:number;target:number}|null;
  worker_pool?:PoolInfo;
+ specialist_pool?:SpecialistInfo;
 };
 type Breakdown={provider:string;board:string;company:string;received:number;accepted:number;ingested:number;
  rejected:number;role:number;source:number;stale:number;cap:number;time:string;id:string};
@@ -65,12 +72,15 @@ export default function DiscoveryMonitor(){
  const [onboard,setOnboard]=useState(false);
  const [expandedSource,setExpandedSource]=useState<string|null>(null);
  const [detailsOpen,setDetailsOpen]=useState(false);
+ const [focusedLane,setFocusedLane]=useState<SpecialistRole|null>(null);
  const [tab,setTab]=useState<'sources'|'activity'>('sources');
  const [autoRefresh,setAutoRefresh]=useState(true);
  useEffect(()=>{try{setOnboard(localStorage.getItem('ci-discovery-tour-v1')!=='seen');}catch{}},[]);
  const finishTour=useCallback(()=>{setOnboard(false);try{localStorage.setItem('ci-discovery-tour-v1','seen');}catch{}},[]);
  useEffect(()=>{if(!autoRefresh)return;const t=setInterval(resource.reload,Math.max(5000,resource.data?.poll_interval_ms??8000));return()=>clearInterval(t);},[autoRefresh,resource.reload,resource.data?.poll_interval_ms]);
  const pool=resource.data?.worker_pool;
+ const specialists=resource.data?.specialist_pool;
+ const specialistWave=specialists?.waves?.[0];
  const wave=pool?.waves?.[0];
  const runs=resource.data?.runs??[];
  const run=runs.find(x=>x.id===selected)??runs[0];
@@ -119,19 +129,59 @@ export default function DiscoveryMonitor(){
     <button className="disc-icon-button" type="button" title="Refresh run data" onClick={resource.reload} aria-label="Refresh run data">↻</button>
    </div>
   </section>
-  <section className="disc-pool-strip" aria-label="Adaptive worker pool">
-   <div className="disc-pool-title"><span className="disc-pool-indicator" data-state={pool?.config?.enabled?'enabled':'paused'}/><div><strong>Worker pool</strong><span>{pool?.config?.enabled?'Adaptive scheduling active':'Adaptive scheduling paused or unavailable'}</span></div></div>
-   {wave?<div className="disc-pool-stats">
-    <div title="Worker requests actually issued in the last controller wave"><small>Launched</small><strong>{wave.dispatched}</strong></div>
-    <div title="Maximum permitted workers given the current delivery progress"><small>Capacity</small><strong>{wave.concurrency_ceiling}</strong></div>
-    <div title="Recently active worker invocations as observed at dispatch time"><small>Already active</small><strong>{wave.active_count}</strong></div>
-    <div title="Approved ATS boards currently eligible for another provider-safe scan"><small>Due boards</small><strong>{wave.due_boards}</strong></div>
-    <div title="Reviews waiting for official verification"><small>Reviews queued</small><strong>{wave.pending_reviews}</strong></div>
-    <div title="Approved knowledge matching tasks waiting to run"><small>Matching queued</small><strong>{wave.pending_matches}</strong></div>
-   </div>:<p className="disc-pool-empty">No controller wave recorded yet. Metrics appear after the scheduled controller runs.</p>}
-   {wave&&<div className="disc-pool-decision" title={'Evaluated '+fullDate(wave.observed_at)+'; '+wave.decision}><strong>{wave.decision.replaceAll('_',' ')}</strong><small>{fullDate(wave.observed_at)}</small></div>}
+  <section className="disc-specialists" aria-label="Specialist worker orchestration">
+   <div className="disc-specialists-heading"><div><h2>Specialist orchestration</h2>
+     <p>Each lane receives capacity based on its own ready work. Select a lane for individual worker runs.</p></div>
+     <span className="disc-specialists-mode" data-active={specialists?.config?.enabled?'yes':'no'}>
+       {specialists?.config?.enabled?'Adaptive allocation active':'Migration / activation pending'}</span>
+   </div>
+   <div className="disc-specialists-grid">
+    {(['discovery','eligibility','matching','people','outreach','conversation'] as const).map((role)=>{
+      const lane=specialistWave?.plan?.roles?.find(x=>x.role===role);
+      const runs=specialists?.runs?.filter(x=>x.role===role)||[];
+      const live=runs.filter(x=>x.state==='running').length;
+      const labels:{[key in SpecialistRole]:string}={
+       discovery:'Discovery',eligibility:'Eligibility',matching:'Matching',
+       people:'People research',outreach:'Outreach drafts',conversation:'Conversations'};
+      return <button type="button" key={role} className="disc-specialist-lane"
+       onClick={()=>setFocusedLane(role)} title={'Inspect '+labels[role]+' workers and queue'}
+       aria-label={'Inspect '+labels[role]+': '+(lane?.queued??0)+' queued, '+live+' running'}>
+       <div className="disc-specialist-name"><strong>{labels[role]}</strong><span className={live>0?'disc-activity-live':'disc-activity-idle'}>{live>0?'Running':'Idle'}</span></div>
+       <div className="disc-specialist-numbers">
+        <div><b>{number(lane?.queued)}</b><small>Ready</small></div>
+        <div><b>{number(lane?.desired)}</b><small>Needed</small></div>
+        <div><b>{number(lane?.active)}</b><small>Active</small></div>
+       </div>
+       <div className="disc-specialist-foot"><span>Last launch {specialistWave?.dispatched?.[role]??0}</span><span aria-hidden="true">Inspect ↗</span></div>
+      </button>;
+    })}
+   </div>
+   <div className="disc-specialists-footer"><span>Measured from signed worker runs, source cooldowns and task queues.</span>
+     <span>{specialistWave?fullDate(specialistWave.observed_at):'Awaiting first controller wave'}</span>
+   </div>
   </section>
-  <p className="disc-pool-explainer">The controller launches real signed worker instances when approved sources or queues have work. Capacity reduces from 10 to 5 near the daily target; workers already running are allowed to finish. These are shared pipeline workers, not separate LangGraph agents.</p>
+  {focusedLane&&<div className="disc-specialist-layer">
+   <button type="button" className="disc-specialist-scrim" onClick={()=>setFocusedLane(null)} aria-label="Close specialist details"/>
+   <aside role="dialog" aria-modal="true" aria-labelledby="disc-specialist-drawer-title" className="disc-specialist-drawer">
+    <header><div><p>Specialist worker instances</p><h2 id="disc-specialist-drawer-title">{focusedLane.replaceAll('_',' ')} workers</h2></div>
+       <button type="button" onClick={()=>setFocusedLane(null)} aria-label="Close details">×</button></header>
+    <div className="disc-specialist-drawer-body">
+     {(()=>{const lane=specialistWave?.plan?.roles?.find(x=>x.role===focusedLane);
+      return <div className="disc-specialist-detail-counts"><span>Ready tasks: <b>{number(lane?.queued)}</b></span>
+       <span>Calculated demand: <b>{number(lane?.desired)}</b></span>
+       <span>Current active: <b>{number(lane?.active)}</b></span>
+       <span>New requests: <b>{specialistWave?.dispatched?.[focusedLane]??0}</b></span></div>;})()}
+     <h3>Recent actual executions</h3>
+     {specialists?.runs?.filter(x=>x.role===focusedLane).length?
+       specialists.runs.filter(x=>x.role===focusedLane).map(r=>
+       <div className="disc-specialist-run" key={r.id}>
+        <strong>{r.state.replaceAll('_',' ')}</strong><span>{fullDate(r.started_at)}</span>
+        <small>{r.processed} processed · {r.failures} failures</small>
+       </div>):<p className="disc-empty">No recorded executions for this specialist yet. No activity is simulated.</p>}
+     <p className="disc-specialist-note">Capacity adapts to available work and recent worker health; an infrastructure request budget prevents runaway costs. No queued work means no new instances.</p>
+    </div>
+   </aside>
+  </div>}
   <section className="disc-journey" aria-labelledby="disc-journey-title">
    <div className="disc-section-heading"><div><h2 id="disc-journey-title">Discovery at a glance</h2><p>Counts come from the selected worker run, not the whole database. In-progress runs update as sources finish.</p></div><span className="disc-label">{fullyMeasured?'MEASURED':running&&observedSources?'LIVE · SO FAR':observedSources?'PARTIAL EVENT RECORD':'HISTORICAL / LIMITED DATA'}</span></div>
    <div className="disc-funnel">

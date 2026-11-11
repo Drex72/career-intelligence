@@ -98,6 +98,20 @@ Deno.serve(async (request:Request)=>{
             .eq('id',1).maybeSingle()
         ]);
         if(poolWaves.error||poolConfig.error)throw new Error('worker pool status unavailable');
+        const [specialistWaves,specialistConfig,specialistRuns]=await Promise.all([
+          db.from('ci_specialist_pool_waves')
+            .select('id,observed_at,decision,total_launched,plan,dispatched')
+            .order('observed_at',{ascending:false}).limit(8),
+          db.from('ci_specialist_pool_config')
+            .select('enabled,active_budget,dispatch_budget,interval_seconds')
+            .eq('id',1).maybeSingle(),
+          db.from('ci_worker_runs')
+            .select('id,specialist_role,state,started_at,finished_at,details')
+            .not('specialist_role','is',null)
+            .order('started_at',{ascending:false}).limit(48)
+        ]);
+        if(specialistWaves.error||specialistConfig.error||specialistRuns.error)
+          throw new Error('specialist orchestration read unavailable');
         const latest=list(batches.data)[0];
         let delivered=0;
         if(latest){
@@ -160,6 +174,18 @@ Deno.serve(async (request:Request)=>{
           latest_batch:latest?{date:latest.local_date,state:latest.state,target:latest.target,delivered}:null,
           runs:list(workers.data),roles:roleStates,
           worker_pool:{config:poolConfig.data,waves:list(poolWaves.data)},
+          specialist_pool:{
+            config:specialistConfig.data,
+            waves:list(specialistWaves.data),
+            runs:list(specialistRuns.data).map((r:any)=>({
+              id:r.id,role:r.specialist_role,state:r.state,
+              started_at:r.started_at,finished_at:r.finished_at,
+              processed:r.details?.ats_jobs??r.details?.reviewed??r.details?.matched??
+                r.details?.people_processed??r.details?.drafts_prepared??
+                r.details?.replies_classified??0,
+              failures:r.details?.failures??0
+            }))
+          },
 
           jobs:list(jobs.data).map((j:any)=>({
             id:j.id,title:j.title,company:j.ci_companies?.legal_name||'Unknown',
