@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import {useCallback,useEffect,useMemo,useState} from 'react';
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {PageHeading} from '@/components/WorkspaceUI';
 import {StateNotice} from '@/components/ResourceTable';
 import {useResource} from '@/components/useResource';
@@ -41,9 +41,11 @@ const guide=[
 ];
 function FirstVisit({onDone}:{onDone:()=>void}){
  const [step,setStep]=useState(0);
- return <div className="disc-tour-mask" role="presentation">
+ const skipRef=useRef<HTMLButtonElement>(null);
+ useEffect(()=>{skipRef.current?.focus();},[]);
+ return <div className="disc-tour-mask" role="presentation" onKeyDown={e=>{if(e.key==='Escape')onDone();}}>
   <section className="disc-tour" role="dialog" aria-modal="true" aria-labelledby="disc-tour-title">
-   <div className="disc-tour-top"><span>GUIDED TOUR · {step+1} OF {guide.length}</span><button type="button" onClick={onDone}>Skip tour</button></div>
+   <div className="disc-tour-top"><span>GUIDED TOUR · {step+1} OF {guide.length}</span><button ref={skipRef} type="button" onClick={onDone}>Skip tour</button></div>
    <div className="disc-tour-illustration" aria-hidden="true">
     <span className={step===0?'active':''}>Pick a run</span><span className="disc-tour-line"/><span className={step===1?'active':''}>Follow jobs</span><span className="disc-tour-line"/><span className={step===2?'active':''}>See why</span>
    </div>
@@ -60,7 +62,6 @@ export default function DiscoveryMonitor(){
  const [detailsOpen,setDetailsOpen]=useState(false);
  const [tab,setTab]=useState<'sources'|'activity'>('sources');
  const [autoRefresh,setAutoRefresh]=useState(true);
- const [showAllRuns,setShowAllRuns]=useState(false);
  useEffect(()=>{try{setOnboard(localStorage.getItem('ci-discovery-tour-v1')!=='seen');}catch{}},[]);
  const finishTour=useCallback(()=>{setOnboard(false);try{localStorage.setItem('ci-discovery-tour-v1','seen');}catch{}},[]);
  useEffect(()=>{if(!autoRefresh)return;const t=setInterval(resource.reload,Math.max(5000,resource.data?.poll_interval_ms??8000));return()=>clearInterval(t);},[autoRefresh,resource.reload,resource.data?.poll_interval_ms]);
@@ -102,7 +103,7 @@ export default function DiscoveryMonitor(){
   <PageHeading meta="DISCOVERY / OBSERVE" title="Where did the jobs go?" description="Track one real discovery run, see which postings passed, and understand why others were excluded." action={<div className="disc-top-actions"><button type="button" className="disc-top-button" onClick={()=>setOnboard(true)}>How this works</button><Link className="disc-top-button" href="/factory/advanced">Technical map <span aria-hidden="true">↗</span></Link></div>}/>
   <StateNotice loading={!resource.data&&resource.loading} error={resource.error}/>
   <section className="disc-control" aria-label="Discovery run selector">
-   <div className="disc-control-copy"><div className="disc-pulse" data-state={run?.state||'none'}/><div><strong>{running?'Discovery is running':run?'Selected discovery activity':'No worker runs yet'}</strong><p>{run?'Started '+fullDate(run.started_at)+' · '+run.state.replaceAll('_',' '):'Run history appears after the signed worker executes.'}</p></div></div>
+   <div className="disc-control-copy"><div className="disc-pulse" data-state={run?.state||'none'}/><div><strong>{running?'Discovery is running':run?'Selected discovery activity':'No worker runs yet'}</strong><p>{run?'Started '+fullDate(run.started_at)+' · '+run.state.replaceAll('_',' '):'Runs appear after the worker executes. It scans approved source APIs, not arbitrary sites.'}</p></div></div>
    <div className="disc-control-actions">
     <label htmlFor="disc-run-select">Run</label><select id="disc-run-select" value={run?.id??''} onChange={e=>{setSelected(e.target.value);setExpandedSource(null);}} disabled={!runs.length}>
      {runs.map((r,i)=><option key={r.id} value={r.id}>{i===0?'Latest · ':''}{fullDate(r.started_at)} · {r.state}</option>)}
@@ -122,7 +123,7 @@ export default function DiscoveryMonitor(){
    </div>
    <div className="disc-funnel-outcome"><span className="disc-funnel-outcome-mark" aria-hidden="true">↳</span><strong>{number(excluded)} filtered out</strong><span>{hasFunnel?'The screening reasons are shown below.':'Earlier runs did not capture rejection counts. Values are not estimated.'}</span></div>
    {hasFunnel&&!fullyMeasured&&<div className="disc-measurement-note">These figures cover only the source events recorded so far. They may change as this run progresses and may omit older events outside the trace window.</div>}
-   {fullyMeasured&&<div className="disc-funnel-caption">Filtered means rejected by the initial source rules. {number(data?.not_selected??0)} additional passing posting(s) were beyond per-board processing limits. {number(data?.save_failures??0)} database write(s) failed. Neither is counted as a screening rejection.</div>}
+   {fullyMeasured&&<div className="disc-funnel-caption">Stored counts successful ingestion or upserts, not guaranteed newly discovered unique jobs. Filtered means rejected by the initial source rules. {number(data?.not_selected??0)} additional passing posting(s) were beyond per-board processing limits. {number(data?.save_failures??0)} database write(s) failed. Neither is counted as a screening rejection.</div>}
    {!hasFunnel&&<div className="disc-measurement-note">Detailed discovery counts were introduced after this run. Select a newer measured run once one is available. Existing totals cannot be reconstructed reliably.</div>}
   </section>
   <div className="disc-work-grid">
@@ -158,7 +159,7 @@ export default function DiscoveryMonitor(){
     </div>
    </div>
    {tab==='sources'?<div className="disc-outcomes">
-    <div><small>Saved jobs</small><strong>{number(stored)}</strong><span>Initial screening passed and database saved</span></div>
+    <div><small>Saved jobs</small><strong>{number(stored)}</strong><span>Accepted database ingestions; may update existing jobs</span></div>
     <div><small>Official eligibility reviews</small><strong>{number(data?.reviewed)}</strong><span>From the review queue, not necessarily the same new jobs</span></div>
     <div><small>Confirmed eligible</small><strong>{number(data?.verified_eligible)}</strong><span>Official job-scoped evidence; not a guarantee of delivery</span></div>
     <div><small>Profile matches</small><strong>{number(data?.matched)}</strong><span>Requires approved knowledge and eligible handoff</span></div>
