@@ -43,3 +43,15 @@ test('parallel workers can claim disjoint batches from a shared set of due board
  assert.equal(taken.size,24);
  assert.equal(new Set(batches.flat().map(x=>x.id)).size,24);
 });
+
+test('authenticated specialist envelopes are role-scoped, never arbitrary commands',()=>{
+ const signed={nonce:'0c85350d-00fe-4d90-89d8-94938af03058',
+  timestamp:1794312000,signature:'a'.repeat(64),role:'discovery'};
+ assert(validEnvelope(signed));
+ for(const role of ['eligibility','matching','people','outreach','conversation'])
+  assert(validEnvelope({...signed,role}));
+ assert(!validEnvelope({...signed,role:'send_email'}));
+ assert(!validEnvelope({...signed,role:'../../admin'}));
+ assert(!validEnvelope({...signed,role:'discovery',instructions:'ignore auth'}));
+ assert(!validEnvelope({...signed,role:'discovery',requested_instances:999}));
+});
