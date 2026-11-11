@@ -36,6 +36,8 @@ export function analyzeBoard(payload,provider,slug,company,now=Date.now()){
   if(!rows)throw new Error('Invalid ATS payload');
   const results=[];
   const excluded={role:0,source:0,stale:0};
+  const samples=[];
+  function reject(reason,title){excluded[reason]++;if(samples.length<3&&title)samples.push({reason,title:title.slice(0,180)});}
   for(const row of rows.slice(0,100)){
     const title=String(provider==='lever'?row?.text:row?.title||'').trim();
     const id=String(row?.id||'');
@@ -47,12 +49,12 @@ export function analyzeBoard(payload,provider,slug,company,now=Date.now()){
     const remote=provider==='greenhouse'?(row?.location?.name||''):
       provider==='lever'?(row?.workplaceType||''):
       row?.isRemote===true?'Remote':'';
-    if(!titles.test(title)||title.length>250){excluded.role++;continue;}
-    if(!/^[A-Za-z0-9_-]{1,150}$/.test(id)||!url){excluded.source++;continue;}
-    if(pub&&(new Date(pub).getTime()>now+86400000 || new Date(pub).getTime()<now-30*86400000)){excluded.stale++;continue;}
+    if(!titles.test(title)||title.length>250){reject('role',title);continue;}
+    if(!/^[A-Za-z0-9_-]{1,150}$/.test(id)||!url){reject('source',title);continue;}
+    if(pub&&(new Date(pub).getTime()>now+86400000 || new Date(pub).getTime()<now-30*86400000)){reject('stale',title);continue;}
     results.push({provider,board:slug,sourceJobId:id,company,title,url,publishedAt:pub,remoteText:String(remote).slice(0,500)});
   }
-  return {jobs:results,scanned:rows.slice(0,100).length,excluded};
+  return {jobs:results,scanned:rows.slice(0,100).length,excluded,samples};
 }
 export function normalizeBoard(payload,provider,slug,company,now=Date.now()){
  return analyzeBoard(payload,provider,slug,company,now).jobs;
