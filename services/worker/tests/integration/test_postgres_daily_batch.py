@@ -67,10 +67,15 @@ def test_distinct_verified_roles_at_same_employer_can_both_be_delivered_once():
               values(%s,'verified_eligible',0.95,'[]'::jsonb,'[]'::jsonb,'test')""",(job,))
             roles.append(job)
         assert conn.execute("select ci_generate_daily_batch(%s,%s,100)",
-          (owner,date.today())).fetchone()[0]==2
+          (owner,date.today())).fetchone()[0]>=2
         assert conn.execute("""select count(*) from ci_delivered_companies
           where owner_user_id=%s and company_id=%s""",(owner,company)).fetchone()[0]==1
         assert conn.execute("""select count(*) from ci_delivered_jobs
           where owner_user_id=%s and job_id=any(%s)""",(owner,roles)).fetchone()[0]==2
-        assert conn.execute("select ci_generate_daily_batch(%s,%s,100)",
-          (owner,date.today()+timedelta(days=1))).fetchone()[0]==0
+        # Other tests can leave unrelated verified jobs in the shared disposable DB.
+        # Confirm the two job IDs specifically are never repeated in future batches.
+        conn.execute("select ci_generate_daily_batch(%s,%s,100)",
+          (owner,date.today()+timedelta(days=1)))
+        assert conn.execute("""select count(*) from ci_daily_batch_items i
+          join ci_daily_batches b on b.id=i.batch_id
+          where b.owner_user_id=%s and i.job_id=any(%s)""",(owner,roles)).fetchone()[0]==2
