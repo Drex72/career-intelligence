@@ -36,7 +36,7 @@ grant usage,select on sequence ci_specialist_pool_waves_id_seq to service_role;
 -- Parallel outreach workers can see the same eligible contact; a unique
 -- tuple makes draft creation idempotent. This never authorizes a send.
 create unique index if not exists ci_outreach_drafts_owner_job_contact_uq
-  on ci_outreach_drafts(owner_user_id,job_id,contact_id);
+  on ci_outreach_drafts(owner_user_id,job_id,contact_id) where status='draft';
 
 -- A crashed people worker must not permanently strand its claimed task.
 create or replace function public.ci_reclaim_expired_people_leases()
@@ -191,7 +191,7 @@ begin
     when 'outreach' then 'drafts_prepared'
     else 'replies_classified' end;
   select avg(least(throughput,coalesce(
-     case when details->>metric_key ~ '^[0-9]+
+     case when (details->>metric_key) ~ '^[0-9]+
     then 0.5 when total_runs>=4 and failed_runs::numeric/total_runs>=0.25
     then 0.75 else 1 end;
   desired:=ceil((due::numeric/greatest(1,throughput))*slowdown)::integer;
