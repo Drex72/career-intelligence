@@ -191,7 +191,18 @@ begin
     when 'outreach' then 'drafts_prepared'
     else 'replies_classified' end;
   select avg(least(throughput,coalesce(
-     case when (details->>metric_key) ~ '^[0-9]+
+    case when (details->>metric_key) similar to '[0-9]+'
+      then (details->>metric_key)::numeric else null end,0)))
+    into observed_throughput
+    from (select details from ci_worker_runs
+      where specialist_role=role_name and finished_at is not null
+        and state in ('completed','partial')
+      order by finished_at desc limit 12) recent;
+  if observed_throughput is not null then
+    throughput:=greatest(1,least(throughput,ceil(observed_throughput)::integer));
+  end if;
+  -- Error pressure backs off a role while leaving other roles operational.
+  slowdown:=case when total_runs>=4 and failed_runs::numeric/total_runs>=0.5
     then 0.5 when total_runs>=4 and failed_runs::numeric/total_runs>=0.25
     then 0.75 else 1 end;
   desired:=ceil((due::numeric/greatest(1,throughput))*slowdown)::integer;
