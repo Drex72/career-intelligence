@@ -51,7 +51,7 @@ async function failTask(db,id,workerId,state,nextRetry=null){
   .eq('id',id).eq('state','leased').eq('worker_id',workerId);
 }
 export async function runPeople(db,runID,recordStage){
- const data=await db.from('ci_workflow_tasks').select('id,input_ref,attempt_count,max_attempts')
+ const data=await db.from('ci_workflow_tasks').select('id,input_ref,state,next_retry_at,attempt_count,max_attempts')
   .eq('task_type','people_research').in('state',['pending','retry_wait'])
   .order('created_at').limit(30);
  if(data.error)throw new Error('people queue unreadable');
