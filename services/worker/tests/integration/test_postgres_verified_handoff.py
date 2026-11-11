@@ -58,7 +58,7 @@ def test_approved_knowledge_enables_evidence_gated_matching_exactly_once():
         db.execute("""insert into ci_knowledge_versions
             (document_id,revision,body,parsed_metadata)
             values(%s,%s,'Python, distributed systems, infrastructure','{}'::jsonb)""",
-            (doc,'revision-'+slug))
+            (doc,'hash-'+slug))
         company=db.execute("""insert into ci_companies(normalized_name)
             values(%s) returning id""",('knowledge-'+slug,)).fetchone()[0]
         url='https://jobs.lever.co/'+slug+'/test-job'
