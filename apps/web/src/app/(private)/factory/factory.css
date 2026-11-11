@@ -287,3 +287,5 @@
  .factory-v2-record-drawer .factory-v2-transform-line>span{transform:rotate(90deg);justify-self:center}
 }
 @media(prefers-reduced-motion:reduce){.factory-v2-record-drawer{animation:none}.factory-v2-node::after{transition:none}}
+
+.factory-v2-node[data-lane="bottom"]::after{top:auto;bottom:calc(100% + 9px)}
