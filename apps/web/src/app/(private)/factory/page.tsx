@@ -256,6 +256,17 @@ export default function FactoryFlow(){
      <div className="factory-v2-compact-flow"><span title={stage.input}><small>INPUT</small><b>{stage.input}</b></span><span className="factory-v2-compact-arrow" aria-hidden="true">↓</span><span title={stage.output}><small>OUTPUT</small><b>{stage.output}</b></span></div>
      <div className="factory-v2-compact-transform" title={stage.transform}><small>PROCESSING LOGIC</small><p>{stage.transform}</p></div>
      <div className="factory-v2-compact-stats"><div><small>Recorded events</small><strong>{events.filter(e=>e.stage===selectedStage).length}</strong></div><div><small>Specialist state</small><strong title={roleState?.latest_state||'Not applicable'}>{roleState?.latest_state?.replaceAll('_',' ')||'Not applicable'}</strong></div></div>
+     <div className="factory-v2-compact-events">
+      <div className="factory-v2-compact-events-head"><span>Latest recorded activity</span><span>{events.filter(e=>e.stage===selectedStage).length} events</span></div>
+      {events.filter(e=>e.stage===selectedStage).slice(0,3).map(event=><button type="button" key={event.id}
+       title={event.type.replaceAll('_',' ')+' · '+when(event.time)}
+       onClick={()=>{const index=events.findIndex(e=>e.id===event.id);if(index>=0)chooseEvent(index);setInspectorOpen(true);}}>
+        <span className={'factory-v2-compact-event-dot '+(event.kind==='instrumented'?'instrumented':'')} aria-hidden="true"/>
+        <span className="factory-v2-compact-event-title">{event.type.replaceAll('_',' ')}</span>
+        <span className="factory-v2-compact-event-time">{rel(event.time)}</span>
+       </button>)}
+      {!events.some(e=>e.stage===selectedStage)&&<p>No recorded activity at this stage.</p>}
+     </div>
      <button type="button" className="factory-v2-inspect-cta" onClick={()=>setInspectorOpen(true)} title="Open full job lineage, execution events and JSON comparison">Inspect records &amp; JSON <span aria-hidden="true">↗</span></button>
     </div>
    </aside>
