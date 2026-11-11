@@ -12,7 +12,7 @@ export function validEnvelope(payload){
     /^[0-9a-f]{64}$/.test(payload.signature) &&
     Object.keys(payload).length===3;
 }
-export function selectDueSources(sources, limits, now=Date.now()){
+export function selectDueSources(sources, limits, now=Date.now(), maxCandidates=MAX_BOARDS_PER_RUN){
   const lastRun=new Map((limits||[]).map(item=>[item.action,Date.parse(item.last_run_at)]));
   return (sources||[]).filter(src=>src&&src.kind==='ats'&&src.state==='active' &&
     ['greenhouse','lever','ashby'].includes(src.config?.provider)&&
@@ -23,5 +23,14 @@ export function selectDueSources(sources, limits, now=Date.now()){
       return !Number.isFinite(ts)||ts<=now-6*3600*1000;
     })
     .sort((a,b)=>(lastRun.get('ats:'+a.name)||0)-(lastRun.get('ats:'+b.name)||0))
-    .slice(0,MAX_BOARDS_PER_RUN);
+    .slice(0,Math.min(200,Math.max(0,maxCandidates)));
+}
+/** Workers claim disjoint source batches before network I/O; rejected claims do not use capacity. */
+export async function claimDueBoardBatch(candidates,claim,max=MAX_BOARDS_PER_RUN){
+  const claimed=[];
+  for(const candidate of candidates||[]){
+    if(claimed.length>=max)break;
+    if(await claim(candidate))claimed.push(candidate);
+  }
+  return claimed;
 }

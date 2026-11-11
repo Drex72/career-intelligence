@@ -23,3 +23,23 @@ test('malformed source identifiers cannot be turned into network destinations',(
  assert.equal(selectDueSources([{kind:'ats',state:'active',name:'bad',config:{
    provider:'lever',slug:'../etc/passwd',company_name:'Other'}}],[],now).length,0);
 });
+
+test('parallel workers can claim disjoint batches from a shared set of due boards',async()=>{
+ const {claimDueBoardBatch}=await import('./policy.mjs');
+ const src=Array.from({length:24},(_,i)=>({
+   id:'test-id-'+i,name:'ats:lever:board-'+i,kind:'ats',state:'active',
+   config:{provider:'lever',slug:'board-'+i,company_name:'Company'}
+ }));
+ const all=selectDueSources(src,[],now,50);
+ assert.equal(all.length,24);
+ const taken=new Set();
+ const claim=async source=>{
+  if(taken.has(source.id))return false;
+  taken.add(source.id);
+  return true;
+ };
+ const batches=await Promise.all(Array.from({length:4},()=>claimDueBoardBatch(all,claim,6)));
+ assert(batches.every(b=>b.length===6));
+ assert.equal(taken.size,24);
+ assert.equal(new Set(batches.flat().map(x=>x.id)).size,24);
+});

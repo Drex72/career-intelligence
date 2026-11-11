@@ -3,7 +3,7 @@
 // a DB-backed, HMAC-authenticated, short-lived nonce gate before any work.
 // All network destinations are fixed public source APIs. Never send email.
 import {createClient} from 'npm:@supabase/supabase-js@2.119.0';
-import {validEnvelope,MAX_BODY_BYTES,MAX_ATS_JOBS_PER_BOARD,MAX_REVIEWS_PER_RUN,selectDueSources} from './policy.mjs';
+import {validEnvelope,MAX_BODY_BYTES,MAX_BOARDS_PER_RUN,MAX_ATS_JOBS_PER_BOARD,MAX_REVIEWS_PER_RUN,selectDueSources,claimDueBoardBatch} from './policy.mjs';
 import {boardEndpoint,analyzeBoard,validBoard} from './ats.mjs';
 import {candidateBoards} from './candidates.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription,postingLocation} from './eligibility.mjs';
@@ -215,17 +215,22 @@ Deno.serve(async (request:Request)=>{
     }
     const [active,limits]=await Promise.all([
       db.from('ci_discovery_sources').select('id,name,kind,state,config')
-        .eq('kind','ats').eq('state','active').limit(50),
+        .eq('kind','ats').eq('state','active').limit(200),
       db.from('ci_api_rate_limits').select('action,last_run_at')
-        .like('action','ats:ats:%').limit(200)
+        .like('action','ats:ats:%').limit(500)
     ]);
-    const boards=selectDueSources(rows(checked(active)),rows(checked(limits)));
+    // Look beyond the first six: concurrent workers must not all fight for
+    // the same board IDs. Each claims up to six distinct boards before fetch.
+    const dueBoards=selectDueSources(rows(checked(active)),rows(checked(limits)),now(),200);
+    const boards=await claimDueBoardBatch(dueBoards,async board=>{
+      const cfg=board.config;
+      if(!validBoard({provider:cfg.provider,slug:cfg.slug,company:cfg.company_name}))return false;
+      const claimed=await db.rpc('ci_claim_ats_slot',{p_source_id:board.id});
+      return !claimed.error&&claimed.data===true;
+    },MAX_BOARDS_PER_RUN);
     const cached=new Map<string,unknown>();
     for(const board of boards){
       const cfg=board.config;
-      if(!validBoard({provider:cfg.provider,slug:cfg.slug,company:cfg.company_name}))continue;
-      const claimed=await db.rpc('ci_claim_ats_slot',{p_source_id:board.id});
-      if(claimed.error||!claimed.data)continue;
       report.attempts++;
       await recordStage('registry','ats_source_gate','board_claimed',
         {provider:cfg.provider,board:cfg.slug,format:'approved_board'},
@@ -277,7 +282,7 @@ Deno.serve(async (request:Request)=>{
     }
     // Deterministic official evidence checks; never infer Nigeria from "remote" alone.
     const queue=rows(checked(await db.from('ci_eligibility_review_queue')
-      .select('job_id').eq('state','pending').order('first_queued_at').limit(8)));
+      .select('job_id').eq('state','pending').order('first_queued_at').limit(100)));
     let reviewAttempts=0;
     for(const item of queue){
       if(reviewAttempts>=MAX_REVIEWS_PER_RUN)break;
@@ -358,8 +363,10 @@ Deno.serve(async (request:Request)=>{
         const revision=await approvedRevision(approved);
         const tasks=rows(checked(await db.from('ci_workflow_tasks')
           .select('id,input_ref').eq('task_type','matching').eq('state','pending')
-          .order('created_at').limit(3)));
+          .order('created_at').limit(30)));
+        let matchedInThisRun=0;
         for(const task of tasks){
+          if(matchedInThisRun>=3)break;
           const input=String(task.input_ref||'');
           const jobId=input.startsWith('job:')?input.slice(4):'';
           if(!/^[0-9a-f]{8}-[0-9a-f-]{27,36}$/i.test(jobId))continue;
@@ -374,6 +381,7 @@ Deno.serve(async (request:Request)=>{
           });
           if(completed.error)report.failures++;
           else if(completed.data){
+            matchedInThisRun++;
             report.matched++;
             await recordStage('matching','approved_knowledge_matcher','match_recorded',
               {job_id:job.id,knowledge_revision:revision,format:'approved_knowledge'},
