@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {classifyOfficialPosting,postingLocation} from './eligibility.mjs';
+import {classifyOfficialPosting,postingLocation,classifyRemoteScope} from './eligibility.mjs';
 
 test('job scoped Nigeria location is evidence, unlike generic worldwide remote',()=>{
   const job={content:'Build distributed systems. Remote work.',location:{name:'Lagos, Nigeria'}};
@@ -68,4 +68,33 @@ test('Ashby location ingestion stays bounded and ignores malformed secondaryLoca
  assert(location.length<=300);
  assert(!location.includes('Location 79'));
  assert.equal(postingLocation({location:'Lagos',secondaryLocations:'Nigeria'},'ashby'),'Lagos');
+});
+
+test('US employer, worldwide remote and Nigeria applicant are distinct facts',()=>{
+ const role={descriptionPlain:'You may work from anywhere in the world, building our infrastructure.',
+  location:'Remote - Global'};
+ assert.equal(classifyRemoteScope(role.descriptionPlain,role.location),'worldwide');
+ const d=classifyOfficialPosting(role.descriptionPlain,role.location);
+ assert.equal(d.remoteScope,'worldwide');
+ assert.equal(d.status,'likely_eligible'); // Global wording alone is NOT verified Nigeria hiring.
+ assert.equal(classifyRemoteScope('Our team has customers worldwide.','Remote'),'unknown');
+ assert.equal(classifyRemoteScope('Join our distributed team.','Remote - USA'),'unknown');
+});
+test('US-only role excludes a Nigeria-based remote applicant even when global marketing text appears',()=>{
+ const descriptions=[
+  'We have a globally distributed team. This position is remote US only.',
+  'Work from anywhere in the world. Must be based in the United States.',
+  'Remote - Global. US work authorization required.',
+  'Work remotely worldwide but only hire candidates in the US.'
+ ];
+ for(const description of descriptions){
+   const result=classifyOfficialPosting(description,'Remote - Global');
+   assert.equal(result.status,'ineligible',description);
+   assert.equal(result.remoteScope,'restricted',description);
+ }
+});
+test('official structured global job location is a worldwide lead, not an eligibility guarantee',()=>{
+ assert.equal(classifyRemoteScope('Infrastructure engineering position','Remote - Global'),'worldwide');
+ assert.equal(classifyOfficialPosting('Infrastructure engineering position','Remote - Global').status,'likely_eligible');
+ assert.notEqual(classifyRemoteScope('Nigeria market research','Lagos, Nigeria'),'worldwide');
 });

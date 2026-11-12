@@ -64,19 +64,38 @@ const positive=[
   /\bnigeria\s+is\s+an?\s+(?:eligible|supported)\s+(?:hiring\s+)?(?:country|location)\b/i,
   /\b(?:eligible|supported)\s+(?:hiring\s+)?(?:countries|locations)\s*[:\-]\s*[^.!?]{0,70}\bnigeria\b/i,
 ];
+/** Job-scoped remote geography is distinct from legal applicant eligibility.
+ * US employer headquarters is also distinct from where the worker must live.
+ */
+export function classifyRemoteScope(raw,officialLocation='') {
+  const text=plainPosting(raw).slice(0,8000);
+  const location=String(officialLocation||'').slice(0,300);
+  const combined=location+' '+text;
+  // Any explicit country-only restriction outranks broad recruiting slogans.
+  const restricted=/\b(?:remote[ -]*(?:us|usa|united states|uk|canada|emea|apac|europe)[ -]*only|(?:must|need to) (?:be|reside|live|work) (?:based |located )?in (?:the )?(?:us|usa|united states)|(?:us|usa|united states) (?:residents|citizens|work authorization) (?:only|required)|(?:applicants|candidates) (?:must be|only) (?:based|located) in (?:the )?(?:us|usa|united states)|(?:only|exclusively) (?:hire|hiring|open to) (?:candidates )?(?:in|from) (?:the )?(?:us|usa|united states))\b/i;
+  if(restricted.test(combined))return 'restricted';
+  const locationGlobal=/^(?:remote\s*[-,(): ]*\s*global|global\s*[-,(): ]*\s*remote|worldwide|remote\s*[-,(): ]*\s*worldwide|anywhere\s+in\s+the\s+world)$/i;
+  if(location.split(';').some(part=>locationGlobal.test(part.trim())))return 'worldwide';
+  const global=/\b(?:remote\s*[-,(): ]*\s*global|global\s*[-,(): ]*\s*remote|remote\s*[-,(): ]*\s*worldwide|work\s+(?:remotely\s+)?from\s+anywhere(?:\s+in\s+the\s+world)?|(?:you\s+can\s+)?work\s+from\s+anywhere\s+in\s+the\s+world|open\s+to\s+(?:candidates|applicants)\s+worldwide)\b/i;
+  return global.test(text)?'worldwide':'unknown';
+}
+
 export function classifyOfficialPosting(raw,officialLocation='') {
   const text=plainPosting(raw);
-  if(!text)return {status:'unknown',confidence:0,reason:'No official description text',excerpt:''};
+  const remoteScope=classifyRemoteScope(raw,officialLocation);
+  if(!text)return {status:'unknown',confidence:0,reason:'No official description text',excerpt:'',remoteScope};
   const location=String(officialLocation||'').slice(0,300).trim();
   const excerpt=(location?'Official job location: '+location+'; ':'')+text.slice(0,1800);
   if(negative.some(x=>x.test(text)))
-    return {status:'ineligible',confidence:0.98,reason:'Official posting explicitly excludes hiring in Nigeria',excerpt};
+    return {status:'ineligible',confidence:0.98,reason:'Official posting explicitly excludes hiring in Nigeria',excerpt,remoteScope};
+  if(remoteScope==='restricted')
+    return {status:'ineligible',confidence:0.95,reason:'Official posting explicitly restricts work to another country',excerpt,remoteScope};
   if(positive.some(x=>x.test(text)))
-    return {status:'verified_eligible',confidence:0.9,reason:'Official job posting explicitly permits Nigeria-based candidates',excerpt};
+    return {status:'verified_eligible',confidence:0.9,reason:'Official job posting explicitly permits Nigeria-based candidates',excerpt,remoteScope};
   if(hasExplicitNigeriaLocation(location))
     return {status:'verified_eligible',confidence:0.9,
-      reason:'Official job location explicitly includes Nigeria',excerpt};
-  if(/\b(?:worldwide|anywhere in the world|global remote)\b/i.test(text))
-    return {status:'likely_eligible',confidence:0.45,reason:'Worldwide wording requires separate Nigeria hiring verification',excerpt};
-  return {status:'unknown',confidence:0,reason:'Official posting does not establish Nigeria hiring eligibility',excerpt};
+      reason:'Official job location explicitly includes Nigeria',excerpt,remoteScope};
+  if(remoteScope==='worldwide'||/\b(?:worldwide|anywhere in the world|global remote)\b/i.test(text))
+    return {status:'likely_eligible',confidence:0.45,reason:'Worldwide wording requires separate Nigeria hiring verification',excerpt,remoteScope};
+  return {status:'unknown',confidence:0,reason:'Official posting does not establish Nigeria hiring eligibility',excerpt,remoteScope};
 }

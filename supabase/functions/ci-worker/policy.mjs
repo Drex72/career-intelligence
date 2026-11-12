@@ -36,3 +36,16 @@ export async function claimDueBoardBatch(candidates,claim,max=MAX_BOARDS_PER_RUN
   }
   return claimed;
 }
+
+/** Rank officially attested US employers first without suppressing other source
+ * discovery; the owner-specific geographic gate is enforced at delivery.
+ */
+export function prioritizeUSCompanies(dueBoards,usCompanyNames){
+ const known=new Set((usCompanyNames||[])
+   .filter(x=>typeof x==='string').map(x=>x.trim().toLowerCase()));
+ return (dueBoards||[]).map((board,index)=>({board,index}))
+   .sort((a,b)=>{
+     const score=x=>known.has(String(x.config?.company_name||'').trim().toLowerCase())?1:0;
+     return score(b.board)-score(a.board)||a.index-b.index;
+   }).map(x=>x.board);
+}
