@@ -132,6 +132,8 @@ jobs:
       - name: Install pinned dashboard dependencies
         working-directory: apps/web
         run: npm ci --no-audit --no-fund
+      - name: Run CI specialist and source failure classification tests
+        run: node --test supabase/functions/ci-worker/*.test.mjs
       - name: Run dashboard behavior tests
         working-directory: apps/web
         run: npm test
