@@ -60,13 +60,15 @@ def main(argv:list[str]|None=None)->int:
     parser=argparse.ArgumentParser(description='GitHub Actions specialist workload planner')
     parser.add_argument('--max-jobs',type=int,default=int(os.getenv('CI_ACTIONS_MAX_JOBS','12')))
     parser.add_argument('--offline-plan',help='Local test JSON (never used in production workflow)')
+    parser.add_argument('--canary',action='store_true',help='Start exactly one non-dispatching dry-run process per role')
     args=parser.parse_args(argv)
     if args.offline_plan:
         with open(args.offline_plan,encoding='utf8') as f:
             plan=json.load(f)
     else:
         plan=read_plan(os.getenv('DATABASE_URL',''))
-    matrix=make_matrix(plan,max_jobs=args.max_jobs)
+    matrix=({'include':[{'role':role,'shard':0} for role in AGENT_ROLES]}
+            if args.canary else make_matrix(plan,max_jobs=args.max_jobs))
     output=json.dumps(matrix,separators=(',',':'))
     # Only bounded role names and integers appear in output, never credentials.
     print(output)
