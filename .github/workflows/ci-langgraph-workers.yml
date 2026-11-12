@@ -82,6 +82,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.CI_ACTIONS_DATABASE_URL }}
           MODE: ${{ steps.guards.outputs.mode }}
+          PYTHONPATH: services/worker/src
           CI_ACTIONS_MAX_JOBS: '12'
         run: |
           if [[ "$MODE" == canary ]]; then
