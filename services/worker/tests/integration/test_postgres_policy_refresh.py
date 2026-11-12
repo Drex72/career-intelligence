@@ -28,8 +28,15 @@ def test_policy_refresh_is_bounded_idempotent_and_preserves_verification():
                    values(%s,%s,0.5,'[]'::jsonb,'[]'::jsonb,'older',now()-interval '1 day',now()+interval '1 day')""",
                 (job,status))
             ids[status]=job
-        assert db.execute("select ci_requeue_policy_reviews(1)").fetchone()[0]==1
-        assert db.execute("select ci_requeue_policy_reviews(30)").fetchone()[0]>=1
+        first=db.execute("select ci_requeue_policy_reviews(1)").fetchone()[0]
+        assert first==1
+        # Other integration tests can have queued weak assessments. Drain bounded batches
+        # rather than assuming this test owns the entire shared disposable database.
+        for _ in range(30):
+            if db.execute("select ci_requeue_policy_reviews(30)").fetchone()[0]==0:
+                break
+        else:
+            pytest.fail("policy refresh failed to converge after 30 bounded batches")
         assert db.execute("select ci_requeue_policy_reviews(30)").fetchone()[0]==0
         for status,job in ids.items():
             state=db.execute("select state from ci_eligibility_review_queue where job_id=%s",(job,)).fetchone()[0]
