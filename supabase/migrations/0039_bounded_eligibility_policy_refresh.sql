@@ -1,13 +1,13 @@
 -- One-time, evidence-preserving refresh of weak ATS decisions after location parser upgrades.
 -- The cutoff is fixed when this migration is installed: later assessments are not requeued.
-create table if not exists public.ci_eligibility_policy_refreshes (
+create table if not exists ci_eligibility_policy_refreshes (
   revision text primary key,
   cutoff_at timestamptz not null default clock_timestamp()
 );
 insert into public.ci_eligibility_policy_refreshes(revision)
 values ('ashby-secondary-and-structured-nigeria-v1') on conflict do nothing;
 
-create table if not exists public.ci_eligibility_policy_refresh_ledger (
+create table if not exists ci_eligibility_policy_refresh_ledger (
   revision text not null references public.ci_eligibility_policy_refreshes(revision),
   job_id uuid not null references public.ci_jobs(id) on delete cascade,
   queued_at timestamptz not null default clock_timestamp(),
