@@ -55,3 +55,17 @@ test('authenticated specialist envelopes are role-scoped, never arbitrary comman
  assert(!validEnvelope({...signed,role:'discovery',instructions:'ignore auth'}));
  assert(!validEnvelope({...signed,role:'discovery',requested_instances:999}));
 });
+
+test('US employers with official headquarters evidence are prioritized, never invented or silently duplicated',async()=>{
+ const {prioritizeUSCompanies}=await import('./policy.mjs');
+ const sources=[
+  {id:'a',config:{company_name:'European Example'}},
+  {id:'b',config:{company_name:'fal'}},
+  {id:'c',config:{company_name:'Unknown Example'}},
+  {id:'d',config:{company_name:'Mercor'}}
+ ];
+ assert.deepEqual(prioritizeUSCompanies(sources,['Mercor','fal']).map(s=>s.id),['b','d','a','c']);
+ assert.deepEqual(prioritizeUSCompanies(sources,[]).map(s=>s.id),['a','b','c','d']);
+ assert.deepEqual(prioritizeUSCompanies(sources,['US-only remote']).map(s=>s.id),['a','b','c','d']);
+ assert.equal(sources[0].id,'a'); // no caller mutation
+});
