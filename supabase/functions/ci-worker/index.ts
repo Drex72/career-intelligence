@@ -3,7 +3,7 @@
 // a DB-backed, HMAC-authenticated, short-lived nonce gate before any work.
 // All network destinations are fixed public source APIs. Never send email.
 import {createClient} from 'npm:@supabase/supabase-js@2.119.0';
-import {validEnvelope,MAX_BODY_BYTES,MAX_BOARDS_PER_RUN,MAX_ATS_JOBS_PER_BOARD,MAX_REVIEWS_PER_RUN,selectDueSources,claimDueBoardBatch} from './policy.mjs';
+import {validEnvelope,MAX_BODY_BYTES,MAX_BOARDS_PER_RUN,MAX_ATS_JOBS_PER_BOARD,MAX_REVIEWS_PER_RUN,selectDueSources,claimDueBoardBatch,prioritizeUSCompanies} from './policy.mjs';
 import {boardEndpoint,analyzeBoard,validBoard} from './ats.mjs';
 import {candidateBoards} from './candidates.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription,postingLocation} from './eligibility.mjs';
@@ -235,7 +235,15 @@ Deno.serve(async (request:Request)=>{
     // Look beyond the first six: concurrent workers must not all fight for
     // the same board IDs. Each claims up to six distinct boards before fetch.
     const dueBoards=selectDueSources(rows(checked(active)),rows(checked(limits)),now(),200);
-    const boards=await claimDueBoardBatch(dueBoards,async board=>{
+    // Prefer official US-headquarters evidence, not a guessed company country
+    // based on which ATS it uses. Keep other approved sources discoverable.
+    const usProof=checked(await db.from('ci_company_country_evidence')
+      .select('company_id').eq('country','US').limit(200));
+    const companyIds=rows(usProof).map(item=>item.company_id);
+    const usCompanies=companyIds.length?rows(checked(await db.from('ci_companies')
+      .select('legal_name').in('id',companyIds).limit(200))).map(c=>c.legal_name):[];
+    const prioritizedBoards=prioritizeUSCompanies(dueBoards,usCompanies);
+    const boards=await claimDueBoardBatch(prioritizedBoards,async board=>{
       const cfg=board.config;
       if(!validBoard({provider:cfg.provider,slug:cfg.slug,company:cfg.company_name}))return false;
       const claimed=await db.rpc('ci_claim_ats_slot',{p_source_id:board.id});
@@ -340,11 +348,6 @@ Deno.serve(async (request:Request)=>{
         });
         if(wrote.error||!wrote.data){report.failures++;}
         else{
-          const scoped=await db.rpc('ci_record_ats_remote_scope',{
-            p_job_id:item.job_id,p_source_url:chosen.sourceURL,
-            p_scope:d.remoteScope||'unknown'
-          });
-          if(scoped.error||!scoped.data)report.failures++;
           report.reviewed++;
           await recordStage('eligibility','official_eligibility_reviewer','assessment_saved',
             {provider:chosen.provider,board:chosen.slug,job_id:item.job_id,format:'official_posting'},
