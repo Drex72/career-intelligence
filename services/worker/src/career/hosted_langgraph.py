@@ -179,7 +179,7 @@ def run_service(
     except ValueError:
         pass  # signal handlers must be registered from the main thread
 
-    with psycopg.connect(db_url, row_factory=dict_row) as conn:
+    with psycopg.connect(db_url, row_factory=dict_row, autocommit=True) as conn:
         with PostgresSaver.from_conn_string(checkpoint_dsn(db_url)) as saver:
             saver.setup()
             with httpx.Client(follow_redirects=False) as client:
@@ -197,13 +197,19 @@ def run_service(
                             ready = int(lane.get("queued", 0))
                             active_count = int(lane.get("active", 0))
                             desired = int(lane.get("desired", 0))
-                            if ready > 0 and desired > active_count and not dry_run:
+                            capacity = max(0, desired - active_count)
+                            cycle_budget = max(1, min(32, int(os.getenv("CI_MAX_DISPATCH_PER_CYCLE", "8"))))
+                            dispatch_count = min(capacity, cycle_budget) if ready and not dry_run else 0
+                            if dispatch_count:
                                 record_heartbeat(conn, role, instance_id, "executing")
-                                thread = str(uuid4())
-                                result = graph.invoke(
-                                    {"role": role}, {"configurable": {"thread_id": thread}}
-                                )
-                                LOGGER.info("specialist=%s state=%s", role, result.get("status"))
+                                for _ in range(dispatch_count):
+                                    if shutdown:
+                                        break
+                                    thread = str(uuid4())
+                                    result = graph.invoke(
+                                        {"role": role}, {"configurable": {"thread_id": thread}}
+                                    )
+                                    LOGGER.info("specialist=%s state=%s", role, result.get("status"))
                             else:
                                 LOGGER.info(
                                     "specialist=%s idle queued=%d active=%d desired=%d dry_run=%s",
