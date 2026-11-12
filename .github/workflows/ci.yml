@@ -94,6 +94,8 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_postgres_candidates.py -v
       - name: Verify stale eligibility requeue and official negative overrides
         run: python -m pytest services/worker/tests/integration/test_postgres_eligibility_refresh.py -v
+      - name: Verify bounded policy-upgrade re-review and evidence preservation
+        run: python -m pytest services/worker/tests/integration/test_postgres_policy_refresh.py -v
       - name: Verify signed worker HMAC, replay controls and private secrets
         run: python -m pytest services/worker/tests/integration/test_postgres_signed_worker.py -v
       - name: Verify verified-job matching and people task handoff
