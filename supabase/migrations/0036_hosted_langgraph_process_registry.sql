@@ -12,6 +12,7 @@ create table if not exists ci_langgraph.runtime_processes(
  started_at timestamptz not null default now(),
  last_heartbeat_at timestamptz not null default now()
 );
+alter table ci_langgraph.runtime_processes enable row level security;
 create index if not exists ci_langgraph_process_status_idx
  on ci_langgraph.runtime_processes(role,last_heartbeat_at desc);
 revoke all on ci_langgraph.runtime_processes from public,anon,authenticated;
