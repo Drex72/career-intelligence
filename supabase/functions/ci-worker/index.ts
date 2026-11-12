@@ -340,6 +340,11 @@ Deno.serve(async (request:Request)=>{
         });
         if(wrote.error||!wrote.data){report.failures++;}
         else{
+          const scoped=await db.rpc('ci_record_ats_remote_scope',{
+            p_job_id:item.job_id,p_source_url:chosen.sourceURL,
+            p_scope:d.remoteScope||'unknown'
+          });
+          if(scoped.error||!scoped.data)report.failures++;
           report.reviewed++;
           await recordStage('eligibility','official_eligibility_reviewer','assessment_saved',
             {provider:chosen.provider,board:chosen.slug,job_id:item.job_id,format:'official_posting'},
