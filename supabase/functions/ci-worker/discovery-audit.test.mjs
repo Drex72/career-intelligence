@@ -54,3 +54,32 @@ test('source-level measurement previews expose numeric facts but not raw descrip
  });
  assert.equal(output.rejected,output.rejected_role+output.rejected_source+output.rejected_stale);
 });
+
+test('large ATS boards include recent relevant jobs beyond the first 100 entries',()=>{
+ const stale=Array.from({length:150},(_,i)=>({
+   ...validGH,id:1000+i,title:'Operations Manager',
+   absolute_url:'https://job-boards.greenhouse.io/example/jobs/'+(1000+i)
+ }));
+ const fresh={...validGH,id:1999,title:'Software Infrastructure Engineer',
+   absolute_url:'https://job-boards.greenhouse.io/example/jobs/1999',
+   first_published:'2026-11-11T08:00:00Z'};
+ const first={...validGH,id:1998,title:'Backend Software Engineer',
+   absolute_url:'https://job-boards.greenhouse.io/example/jobs/1998',
+   first_published:'2026-11-09T08:00:00Z'};
+ const out=analyzeBoard({jobs:[first,...stale,fresh]},'greenhouse','example','Example Ltd',now);
+ assert.equal(out.scanned,152);
+ assert.equal(out.jobs.length,2);
+ assert.equal(out.jobs[0].sourceJobId,'1999');
+ assert.equal(out.jobs[1].sourceJobId,'1998');
+ assert.equal(out.excluded.role,150);
+});
+
+test('ATS scanning stays capped at 500 entries without weakening source checks',()=>{
+ const candidates=Array.from({length:510},(_,i)=>({
+   ...validGH,id:4000+i,absolute_url:'https://job-boards.greenhouse.io/example/jobs/'+(4000+i)
+ }));
+ const out=analyzeBoard({jobs:candidates},'greenhouse','example','Example Ltd',now);
+ assert.equal(out.scanned,500);
+ assert.equal(out.jobs.length,500);
+ assert(!out.jobs.some(x=>x.sourceJobId==='4500'));
+});
