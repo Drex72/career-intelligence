@@ -1,0 +1,12 @@
+FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    LANGGRAPH_STRICT_MSGPACK=true
+WORKDIR /app
+COPY services/worker /app/services/worker
+RUN pip install --no-cache-dir -e '/app/services/worker[agents]' && \
+    useradd --system --create-home --uid 10001 langgraph
+USER langgraph
+# Persistent background service; no inbound HTTP port or public domain.
+# Deploy this same image as six distinct services, each with a different CI_SPECIALIST_ROLE.
+ENTRYPOINT ["python","-m","career.hosted_langgraph"]
