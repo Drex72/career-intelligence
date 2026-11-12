@@ -18,7 +18,7 @@ grant select,insert,update on ci_geo_target_preferences to service_role;
 create table if not exists ci_company_country_evidence(
  company_id uuid primary key references ci_companies(id) on delete cascade,
  country char(2) not null check(country ~ '^[A-Z]{2}$'),
- source_url text not null check(source_url ~ '^https://[^[:space:]]{4,500}$'),
+ source_url text not null check(length(source_url) between 12 and 500 and source_url ~ '^https://[^[:space:]]+$'),
  source_kind text not null default 'official_company' check(source_kind='official_company'),
  observed_at timestamptz not null default now()
 );
@@ -32,7 +32,7 @@ grant select,insert,update on ci_company_country_evidence to service_role;
 create table if not exists ci_job_remote_scope_evidence(
  job_id uuid primary key references ci_jobs(id) on delete cascade,
  scope text not null check(scope in ('worldwide','restricted','unknown')),
- source_url text not null check(source_url ~ '^https://[^[:space:]]{4,1500}$'),
+ source_url text not null check(length(source_url) between 12 and 1500 and source_url ~ '^https://[^[:space:]]+$'),
  observed_at timestamptz not null default now(),
  expires_at timestamptz not null,
  policy_version text not null default 'official-remote-scope-v1'
