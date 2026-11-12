@@ -10,6 +10,7 @@ import {classifyOfficialPosting,findOfficialJob,postingDescription,postingLocati
 import {classifyWorkFacts} from './work-facts.mjs';
 import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
 import {safePreview} from './telemetry.mjs';
+import {SourceFetchFailure,httpSourceFailure,sourceFailureReason} from './diagnostics.mjs';
 import {runPeople,runOutreach,runConversation} from './specialists.mjs';
 import {analyzeHimalayas,safeHimalayasCursor,isSoftwareRole} from './himalayas.mjs';
 
@@ -26,10 +27,10 @@ async function fetchJSON(url:string,timeout=12000):Promise<any>{
     redirect:'error',signal:AbortSignal.timeout(timeout),
     headers:{'Accept':'application/json','User-Agent':'CareerIntelligenceScheduledResearch/0.7'}
   });
-  if(!response.ok)throw new Error('public source unavailable');
-  if(Number(response.headers.get('content-length')||0)>2_000_000)throw new Error('source too large');
+  if(!response.ok)throw httpSourceFailure(response.status);
+  if(Number(response.headers.get('content-length')||0)>2_000_000)throw new SourceFetchFailure('response_too_large');
   const raw=await response.text();
-  if(raw.length>2_000_000)throw new Error('source too large');
+  if(raw.length>2_000_000)throw new SourceFetchFailure('response_too_large');
   return JSON.parse(raw);
 }
 function remotiveRole(job:any,stamp:number){
@@ -289,7 +290,12 @@ Deno.serve(async (request:Request)=>{
            rejected:audit.scanned-candidates.length,rejected_role:audit.excluded.role,
            rejected_source:audit.excluded.source,rejected_stale:audit.excluded.stale,
            not_selected:candidates.length-shortlisted.length,format:'canonical_job'});
-      }catch{report.failures++;}
+      }catch(error){
+        report.failures++;
+        await recordStage('registry','ats_source_gate','board_failed',
+          {provider:cfg.provider,board:cfg.slug,format:'provider_api'},
+          {status:'retry_later',reason:sourceFailureReason(error)});
+      }
     }
     }
     if(role==='legacy'||role==='eligibility'){
