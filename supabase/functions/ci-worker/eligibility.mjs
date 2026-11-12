@@ -38,7 +38,7 @@ const nigeriaLocation=/^(?:nigeria|[^\n]{1,100},\s*nigeria)(?:\s*\((?:remote|hyb
  */
 export function hasExplicitNigeriaLocation(value) {
   const location=String(value||'').slice(0,300).trim();
-  if(hasExplicitNigeriaLocation(location))return true;
+  if(nigeriaLocation.test(location))return true;
   if(!location.includes(';'))return false;
   return location.split(';').length<=30 &&
     location.split(';').some(part=>nigeriaLocation.test(part.trim()));
