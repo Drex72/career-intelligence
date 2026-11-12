@@ -64,7 +64,7 @@ export function classifyOfficialPosting(raw,officialLocation='') {
     return {status:'ineligible',confidence:0.98,reason:'Official posting explicitly excludes hiring in Nigeria',excerpt};
   if(positive.some(x=>x.test(text)))
     return {status:'verified_eligible',confidence:0.9,reason:'Official job posting explicitly permits Nigeria-based candidates',excerpt};
-  if(nigeriaLocation.test(location))
+  if(hasExplicitNigeriaLocation(location))
     return {status:'verified_eligible',confidence:0.9,
       reason:'Official job location explicitly includes Nigeria',excerpt};
   if(/\b(?:worldwide|anywhere in the world|global remote)\b/i.test(text))
