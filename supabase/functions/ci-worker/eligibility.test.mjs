@@ -43,3 +43,29 @@ test('continent-level or unstructured claims are never promoted to Nigeria eligi
 test('explicit Nigeria prohibition overrides structured eligible location entries',()=>{
  assert.equal(classifyOfficialPosting('We cannot hire in Nigeria','Egypt; Nigeria; Kenya').status,'ineligible');
 });
+
+test('Ashby verified location scope includes official secondaryLocations, not only primary',()=>{
+ const posting={location:'South Africa - CPT',secondaryLocations:[
+  {location:'Egypt'},{location:'Kenya'},{location:'Nigeria',address:{addressCountry:'Nigeria'}},
+  {location:'South Africa - JHB'}
+ ]};
+ const location=postingLocation(posting,'ashby');
+ assert.equal(location,'South Africa - CPT; Egypt; Kenya; Nigeria; South Africa - JHB');
+ assert.equal(classifyOfficialPosting('Build distributed infrastructure.',location).status,'verified_eligible');
+});
+test('Ashby untrusted secondary data cannot assert Nigeria via marketing copy',()=>{
+ const posting={location:'London',secondaryLocations:[
+  {location:'Africa'}, {description:'Nigeria'}, {location:'Nigeria - excluded'}
+ ]};
+ const location=postingLocation(posting,'ashby');
+ assert.equal(classifyOfficialPosting('Remote engineering role.',location).status,'unknown');
+});
+test('Ashby location ingestion stays bounded and ignores malformed secondaryLocations',()=>{
+ const posting={location:'Paris',secondaryLocations:Array.from({length:80},(_,i)=>({
+  location:'Location '+i
+ }))};
+ const location=postingLocation(posting,'ashby');
+ assert(location.length<=300);
+ assert(!location.includes('Location 79'));
+ assert.equal(postingLocation({location:'Lagos',secondaryLocations:'Nigeria'},'ashby'),'Lagos');
+});

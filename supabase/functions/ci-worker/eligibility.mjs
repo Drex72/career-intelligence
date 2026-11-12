@@ -26,9 +26,18 @@ export function postingDescription(posting,provider) {
 /** Official structured job-location fields, never extracted from free-form marketing copy. */
 export function postingLocation(posting,provider) {
   if(!posting)return '';
+  if(provider==='ashby'){
+    // Official Ashby posting API exposes secondaryLocations as job-scoped
+    // structured hiring locations. Do not infer countries from the description.
+    const primary=posting.location||posting.address?.postalAddress?.addressCountry;
+    const extras=Array.isArray(posting.secondaryLocations)?posting.secondaryLocations.slice(0,16):[];
+    const locations=[primary,...extras.map(item=>item?.location||item?.address?.addressCountry)]
+      .filter(value=>typeof value==='string'&&value.trim()&&value.length<=100)
+      .map(value=>value.trim());
+    return [...new Set(locations)].join('; ').slice(0,300);
+  }
   const value=provider==='greenhouse'?posting.location?.name:
-    provider==='lever'?posting.categories?.location:
-    provider==='ashby'?(posting.location||posting.address?.postalAddress?.addressCountry):'';
+    provider==='lever'?posting.categories?.location:'';
   return typeof value==='string'?value.slice(0,300).trim():'';
 }
 const nigeriaLocation=/^(?:nigeria|[^\n]{1,100},\s*nigeria)(?:\s*\((?:remote|hybrid|onsite|on-site)\))?$/i;
