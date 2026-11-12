@@ -123,6 +123,26 @@ def checkpoint_dsn(database_url: str) -> str:
     return make_conninfo(database_url, options="-c search_path=ci_langgraph,public")
 
 
+def require_no_parallel_scheduler(conn) -> None:
+    """Fail closed when GitHub Actions could race the existing Supabase cron.
+
+    Call for every live one-shot invocation (not only at workflow planning time).
+    If cron metadata is inaccessible, abort rather than assume it is safe.
+    """
+    if conn.execute("select to_regclass('cron.job') as present").fetchone()['present'] is None:
+        raise RuntimeError("Cannot verify Supabase scheduler is disabled")
+    active=conn.execute(
+        """select count(*) as n from cron.job
+          where active and jobname in (
+            'ci-role-aware-specialist-pool-15m',
+            'ci-adaptive-worker-pool-15m',
+            'ci-unattended-public-research-6h'
+          )"""
+    ).fetchone()['n']
+    if active:
+        raise RuntimeError("Old Supabase specialist scheduler is active; refusing dual dispatch")
+
+
 def record_heartbeat(conn, role: str, instance_id: str, status: str) -> None:
     with conn.transaction():
         conn.execute(
@@ -180,6 +200,8 @@ def run_service(
         pass  # signal handlers must be registered from the main thread
 
     with psycopg.connect(db_url, row_factory=dict_row, autocommit=True) as conn:
+        if active and os.getenv("CI_REQUIRE_CRON_DISABLED","false").lower()=="true":
+            require_no_parallel_scheduler(conn)
         with PostgresSaver.from_conn_string(checkpoint_dsn(db_url)) as saver:
             saver.setup()
             with httpx.Client(follow_redirects=False) as client:
