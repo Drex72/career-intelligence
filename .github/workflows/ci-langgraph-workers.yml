@@ -1,0 +1,149 @@
+name: Career Intelligence — six LangGraph specialists
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'plan = DB-only, canary = six DB/checkpoint dry runs, live = signed specialist work'
+        required: true
+        type: choice
+        default: plan
+        options:
+          - plan
+          - canary
+          - live
+
+# Never execute code from forked PRs with database or worker credentials.
+permissions:
+  contents: read
+
+concurrency:
+  group: career-langgraph-production
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Inspect role demand and set bounded fanout
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' ||
+       vars.CI_GITHUB_ACTIONS_LIVE == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      count: ${{ steps.matrix.outputs.count }}
+      live: ${{ steps.guards.outputs.live }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify required PostgreSQL secret is configured
+        env:
+          DB_PRESENT: ${{ secrets.CI_ACTIONS_DATABASE_URL != '' }}
+        run: |
+          test "$DB_PRESENT" = true || {
+            echo "::error::Configure CI_ACTIONS_DATABASE_URL in repository Actions secrets."
+            exit 1
+          }
+      - name: Install only required PostgreSQL driver
+        run: python -m pip install 'psycopg[binary]>=3,<4'
+      - name: Resolve execution mode
+        id: guards
+        env:
+          MODE: ${{ github.event.inputs.mode }}
+          LIVE_FLAG: ${{ vars.CI_GITHUB_ACTIONS_LIVE }}
+          WORKER_SECRET_SET: ${{ secrets.CI_ACTIONS_WORKER_SIGNING_KEY != '' }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          case "$MODE" in plan|canary|live|'') ;; *) exit 1 ;; esac
+          if [[ "$EVENT" == "schedule" ]]; then
+            [[ "$LIVE_FLAG" == true ]] || exit 1
+            MODE=live
+          fi
+          if [[ "$MODE" == live ]]; then
+            [[ "$LIVE_FLAG" == true ]] || {
+              echo "::error::Set CI_GITHUB_ACTIONS_LIVE=true only after disabling the Supabase cron scheduler."
+              exit 1
+            }
+            [[ "$WORKER_SECRET_SET" == true ]] || {
+              echo "::error::CI_ACTIONS_WORKER_SIGNING_KEY must be configured for live runs."
+              exit 1
+            }
+          fi
+          echo "live=$([[ "$MODE" == live ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+      - name: Inspect Supabase backlog and create bounded GitHub Actions matrix
+        id: matrix
+        env:
+          DATABASE_URL: ${{ secrets.CI_ACTIONS_DATABASE_URL }}
+          MODE: ${{ steps.guards.outputs.mode }}
+          CI_ACTIONS_MAX_JOBS: '12'
+        run: |
+          if [[ "$MODE" == canary ]]; then
+            python -m career.actions_plan --canary
+          else
+            python -m career.actions_plan
+          fi
+
+  bootstrap:
+    name: Initialize private LangGraph checkpoint schema
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python LangGraph checkpoint runtime
+        run: python -m pip install -e 'services/worker[agents]'
+      - name: Initialize and inspect checkpoint database without sending work
+        env:
+          DATABASE_URL: ${{ secrets.CI_ACTIONS_DATABASE_URL }}
+          CI_WORKER_ENDPOINT: https://manqpbwiwmzqxgldhbdt.supabase.co/functions/v1/ci-worker
+          CI_LANGGRAPH_ENABLED: 'false'
+        run: python -m career.hosted_langgraph --role discovery --once --dry-run
+
+  specialist:
+    name: ${{ matrix.role }} / worker ${{ matrix.shard }}
+    needs: [plan, bootstrap]
+    if: needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real specialist LangGraph runtime
+        run: python -m pip install -e 'services/worker[agents]'
+      - name: Run one bounded specialist invocation
+        env:
+          DATABASE_URL: ${{ secrets.CI_ACTIONS_DATABASE_URL }}
+          CI_WORKER_SIGNING_KEY: ${{ secrets.CI_ACTIONS_WORKER_SIGNING_KEY }}
+          CI_WORKER_ENDPOINT: https://manqpbwiwmzqxgldhbdt.supabase.co/functions/v1/ci-worker
+          CI_SPECIALIST_ROLE: ${{ matrix.role }}
+          CI_LANGGRAPH_ENABLED: ${{ needs.plan.outputs.live }}
+          CI_REQUIRE_CRON_DISABLED: ${{ needs.plan.outputs.live }}
+          CI_MAX_DISPATCH_PER_CYCLE: '1'
+          LANGGRAPH_STRICT_MSGPACK: 'true'
+        run: |
+          if [[ "$CI_LANGGRAPH_ENABLED" == true ]]; then
+            python -m career.hosted_langgraph --once --role "$CI_SPECIALIST_ROLE"
+          else
+            python -m career.hosted_langgraph --once --dry-run --role "$CI_SPECIALIST_ROLE"
+          fi
