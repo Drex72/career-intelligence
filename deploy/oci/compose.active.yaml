@@ -1,0 +1,20 @@
+# Production override. Never use while ci-role-aware-specialist-pool-15m is active.
+# With no CMD arguments, the image entrypoint starts in live mode.
+x-live: &live
+  command: []
+  environment:
+    CI_LANGGRAPH_ENABLED: "true"
+
+services:
+  discovery:
+    <<: *live
+  eligibility:
+    <<: *live
+  matching:
+    <<: *live
+  people:
+    <<: *live
+  outreach:
+    <<: *live
+  conversation:
+    <<: *live
