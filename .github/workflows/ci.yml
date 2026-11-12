@@ -16,6 +16,39 @@ jobs:
         run: python -m pip install -e 'services/worker[test]'
       - name: Run offline contract, unit and local integration tests
         run: python -m pytest services/worker/tests -q
+  oci-compose-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate both safe and active OCI worker configurations
+        run: |
+          cp deploy/oci/secrets.env.example deploy/oci/secrets.env
+          chmod 600 deploy/oci/secrets.env
+          docker compose -f deploy/oci/compose.yaml config --format json > /tmp/oci-dry.json
+          docker compose -f deploy/oci/compose.yaml -f deploy/oci/compose.active.yaml config --format json > /tmp/oci-active.json
+          python - <<'PY'
+          import json
+          expected={'discovery','eligibility','matching','people','outreach','conversation'}
+          for phase,path in (('dry','/tmp/oci-dry.json'),('active','/tmp/oci-active.json')):
+              data=json.load(open(path))
+              assert set(data['services'])==expected
+              for name,spec in data['services'].items():
+                  env=spec['environment']
+                  assert env['CI_SPECIALIST_ROLE']==name
+                  assert env['CI_LANGGRAPH_ENABLED']==('false' if phase=='dry' else 'true')
+                  assert spec.get('ports') is None
+                  assert spec.get('privileged',False) is False
+                  assert 'ALL' in spec.get('cap_drop',[])
+                  assert 'ci-worker' in env['CI_WORKER_ENDPOINT']
+                  assert not spec.get('networks',{}).get('host')
+                  assert spec.get('mem_limit') is not None
+                  if phase=='dry':
+                      assert spec.get('command')==['--dry-run']
+                  else:
+                      assert spec.get('command') is None or spec.get('command')==[]
+          print('OCI Compose safety and role separation checks passed.')
+          PY
+          rm -f deploy/oci/secrets.env
   postgres-tests:
     runs-on: ubuntu-latest
     services:

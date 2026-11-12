@@ -1,0 +1,62 @@
+# One ARM64 OCI Always Free VM; six independent long-running LangGraph workers.
+# This stack starts SAFE in dry-run mode. No Supabase worker request is dispatched.
+# Start real processing ONLY after disabling the old pg_cron scheduler, using
+# "docker compose -f compose.yaml -f compose.active.yaml up -d".
+x-worker: &worker
+  image: career-langgraph:oci
+  build:
+    context: ../..
+    dockerfile: Dockerfile.langgraph
+  env_file:
+    - ./secrets.env
+  restart: unless-stopped
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  # These are protective per-container limits, not fixed orchestrator worker counts.
+  mem_limit: 768m
+  cpus: 0.35
+  pids_limit: 96
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  command: ["--dry-run"]
+
+services:
+  discovery:
+    <<: *worker
+    environment:
+      CI_SPECIALIST_ROLE: discovery
+      CI_LANGGRAPH_ENABLED: "false"
+  eligibility:
+    <<: *worker
+    environment:
+      CI_SPECIALIST_ROLE: eligibility
+      CI_LANGGRAPH_ENABLED: "false"
+  matching:
+    <<: *worker
+    environment:
+      CI_SPECIALIST_ROLE: matching
+      CI_LANGGRAPH_ENABLED: "false"
+  people:
+    <<: *worker
+    environment:
+      CI_SPECIALIST_ROLE: people
+      CI_LANGGRAPH_ENABLED: "false"
+  outreach:
+    <<: *worker
+    environment:
+      CI_SPECIALIST_ROLE: outreach
+      CI_LANGGRAPH_ENABLED: "false"
+  conversation:
+    <<: *worker
+    environment:
+      CI_SPECIALIST_ROLE: conversation
+      CI_LANGGRAPH_ENABLED: "false"
