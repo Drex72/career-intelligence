@@ -25,3 +25,21 @@ test('lever and ashby location fields are provider scoped',()=>{
   assert.equal(postingLocation({description:'Nigeria'},'ashby'),'');
   assert.equal(postingLocation({location:{name:'Nigeria'}},'lever'),'');
 });
+
+test('explicit Nigeria entry in official semicolon-separated job locations is verified',()=>{
+ const location='South Africa - CPT; Egypt; Kenya; Nigeria; South Africa - JHB';
+ const outcome=classifyOfficialPosting('Build production software in a remote engineering team.',location);
+ assert.equal(outcome.status,'verified_eligible');
+ assert.match(outcome.reason,/Official job location/);
+ assert.equal(classifyOfficialPosting('Remote work.','Egypt; Nigeria').status,'verified_eligible');
+ assert.equal(classifyOfficialPosting('Remote work.','Lagos, Nigeria; Accra, Ghana').status,'verified_eligible');
+});
+test('continent-level or unstructured claims are never promoted to Nigeria eligibility',()=>{
+ for(const location of ['Africa','Europe; Africa','London; Europe','Remote; worldwide','Nigeria excluded','Nigeria and Ghana','Somewhere in Nigeria?']) {
+  assert.notEqual(classifyOfficialPosting('Remote role without location-specific hiring guarantees.',location).status,'verified_eligible');
+ }
+ assert.equal(classifyOfficialPosting('Our customers are in Nigeria','Egypt; Kenya').status,'unknown');
+});
+test('explicit Nigeria prohibition overrides structured eligible location entries',()=>{
+ assert.equal(classifyOfficialPosting('We cannot hire in Nigeria','Egypt; Nigeria; Kenya').status,'ineligible');
+});

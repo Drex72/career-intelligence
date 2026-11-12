@@ -32,6 +32,18 @@ export function postingLocation(posting,provider) {
   return typeof value==='string'?value.slice(0,300).trim():'';
 }
 const nigeriaLocation=/^(?:nigeria|[^\n]{1,100},\s*nigeria)(?:\s*\((?:remote|hybrid|onsite|on-site)\))?$/i;
+/** Structured ATS locations can be semicolon-separated country/city entries.
+ * Never infer eligibility from an unstructured paragraph or a continent label.
+ * A job's official Nigeria entry is evidence even when other countries appear.
+ */
+export function hasExplicitNigeriaLocation(value) {
+  const location=String(value||'').slice(0,300).trim();
+  if(nigeriaLocation.test(location))return true;
+  if(!location.includes(';'))return false;
+  return location.split(';').length<=30 &&
+    location.split(';').some(part=>nigeriaLocation.test(part.trim()));
+}
+
 const negative=[
   /\b(?:cannot|can't|can not|do not|don't|unable to|will not|won't)\s+(?:currently\s+)?(?:hire|employ|recruit)\s+(?:applicants|people|candidates|workers)?\s*(?:in|from|based in)\s+nigeria\b/i,
   /\bnigeria\s+(?:is\s+)?(?:not eligible|ineligible|excluded|not a supported|not an eligible)\b/i,
@@ -52,7 +64,7 @@ export function classifyOfficialPosting(raw,officialLocation='') {
     return {status:'ineligible',confidence:0.98,reason:'Official posting explicitly excludes hiring in Nigeria',excerpt};
   if(positive.some(x=>x.test(text)))
     return {status:'verified_eligible',confidence:0.9,reason:'Official job posting explicitly permits Nigeria-based candidates',excerpt};
-  if(nigeriaLocation.test(location))
+  if(hasExplicitNigeriaLocation(location))
     return {status:'verified_eligible',confidence:0.9,
       reason:'Official job location explicitly includes Nigeria',excerpt};
   if(/\b(?:worldwide|anywhere in the world|global remote)\b/i.test(text))
