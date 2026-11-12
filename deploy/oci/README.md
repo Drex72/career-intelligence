@@ -66,6 +66,8 @@ Set `CI_WORKER_SIGNING_KEY` to the existing signing secret managed by your Supab
 ```bash
 bash check-host.sh
 sudo docker compose -f compose.yaml build
+# Initialize the private checkpoint schema once, before simultaneous startup.
+sudo docker compose -f compose.yaml run --rm discovery --dry-run --once
 sudo docker compose -f compose.yaml up -d --no-build
 sudo docker compose -f compose.yaml ps
 ```
