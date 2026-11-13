@@ -13,10 +13,17 @@ export function boardEndpoint(provider,slug){
   if(!providers.has(provider)||!slugPattern.test(slug||'')) throw new Error('Invalid ATS source');
   const part=encodeURIComponent(slug);
   switch(provider){
-    case 'greenhouse': return 'https://boards-api.greenhouse.io/v1/boards/'+part+'/jobs?content=true';
+    case 'greenhouse': return 'https://boards-api.greenhouse.io/v1/boards/'+part+'/jobs';
     case 'lever': return 'https://api.lever.co/v0/postings/'+part+'?mode=json';
     case 'ashby': return 'https://api.ashbyhq.com/posting-api/job-board/'+part;
   }
+}
+/** Single-job detail is only accessed for an already-registered Greenhouse job ID.
+ * Board listing stays compact; its description is not used to infer eligibility.
+ */
+export function greenhouseJobDetailEndpoint(slug,id){
+  if(!slugPattern.test(slug||'')||!/^[0-9]{1,18}$/.test(String(id||'')))throw new Error('Invalid Greenhouse job');
+  return 'https://boards-api.greenhouse.io/v1/boards/'+encodeURIComponent(slug)+'/jobs/'+encodeURIComponent(String(id));
 }
 function postingURL(raw,provider,slug){
   try{
