@@ -353,6 +353,12 @@ Deno.serve(async (request:Request)=>{
           await recordStage('eligibility','official_eligibility_reviewer','assessment_saved',
             {provider:chosen.provider,board:chosen.slug,job_id:item.job_id,format:'official_posting'},
             {status:d.status,reason:d.reason,confidence:d.confidence,format:'eligibility_assessment'},item.job_id);
+          // This is a separate job-scoped gate from Nigeria hiring permission.
+          // Persist even 'unknown' and 'restricted' so no stale worldwide claim survives.
+          const scopeWritten=await db.rpc('ci_record_ats_remote_scope',{
+            p_job_id:item.job_id,p_source_url:chosen.sourceURL,p_scope:d.remoteScope
+          });
+          if(scopeWritten.error||scopeWritten.data!==true)report.failures++;
           if(d.status==='verified_eligible')report.verified_eligible++;
           else if(d.status==='likely_eligible')report.likely_eligible++;
           else if(d.status==='ineligible')report.ineligible++;
