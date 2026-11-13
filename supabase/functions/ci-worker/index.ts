@@ -4,7 +4,7 @@
 // All network destinations are fixed public source APIs. Never send email.
 import {createClient} from 'npm:@supabase/supabase-js@2.119.0';
 import {validEnvelope,MAX_BODY_BYTES,MAX_BOARDS_PER_RUN,MAX_ATS_JOBS_PER_BOARD,MAX_REVIEWS_PER_RUN,selectDueSources,claimDueBoardBatch,prioritizeUSCompanies} from './policy.mjs';
-import {boardEndpoint,analyzeBoard,validBoard} from './ats.mjs';
+import {boardEndpoint,greenhouseJobDetailEndpoint,analyzeBoard,validBoard} from './ats.mjs';
 import {candidateBoards} from './candidates.mjs';
 import {classifyOfficialPosting,findOfficialJob,postingDescription,postingLocation} from './eligibility.mjs';
 import {classifyWorkFacts} from './work-facts.mjs';
@@ -337,8 +337,9 @@ Deno.serve(async (request:Request)=>{
       reviewAttempts++;
       report.attempts++;
       try{
-        const payload=cached.get(chosen.key)??await fetchJSON(boardEndpoint(chosen.provider,chosen.slug));
-        const official=findOfficialJob(payload,chosen.provider,chosen.id);
+        const official=chosen.provider==='greenhouse'
+          ?await fetchJSON(greenhouseJobDetailEndpoint(chosen.slug,chosen.id))
+          :findOfficialJob(cached.get(chosen.key)??await fetchJSON(boardEndpoint(chosen.provider,chosen.slug)),chosen.provider,chosen.id);
         if(!official)continue;
         const d=classifyOfficialPosting(postingDescription(official,chosen.provider),postingLocation(official,chosen.provider));
         const wrote=await db.rpc('ci_record_ats_review',{
