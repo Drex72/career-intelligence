@@ -23,8 +23,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  activation:
+    name: Explain scheduled activation without dispatching
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Report live scheduler configuration
+        env:
+          EVENT: ${{ github.event_name }}
+          LIVE_FLAG: ${{ vars.CI_GITHUB_ACTIONS_LIVE }}
+          DB_PRESENT: ${{ secrets.CI_ACTIONS_DATABASE_URL != '' }}
+          SIGNING_PRESENT: ${{ secrets.CI_ACTIONS_WORKER_SIGNING_KEY != '' }}
+        shell: bash
+        run: |
+          {
+            echo "### Career Intelligence scheduler preflight"
+            echo "- Trigger: $EVENT"
+            if [[ "$LIVE_FLAG" == "true" ]]; then
+              echo "- Scheduled live dispatch: enabled"
+            else
+              echo "- Scheduled live dispatch: disabled (CI_GITHUB_ACTIONS_LIVE must equal true)"
+              echo "::warning::Scheduled LangGraph fanout disabled; no specialists will start." >&2
+            fi
+            echo "- Database connection secret configured: $DB_PRESENT"
+            echo "- Worker signing secret configured: $SIGNING_PRESENT"
+            echo "- Worker dispatch occurs only after the existing planner and signed-worker guards."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   plan:
     name: Inspect role demand and set bounded fanout
+    needs: activation
     if: >-
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
@@ -90,6 +119,16 @@ jobs:
           else
             python -m career.actions_plan
           fi
+      - name: Summarize bounded specialist demand
+        if: always()
+        env:
+          COUNT: ${{ steps.matrix.outputs.count }}
+          MODE: ${{ steps.guards.outputs.mode }}
+        run: |
+          echo "### LangGraph planning outcome" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Mode: ${MODE:-unresolved}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Specialist processes requested: ${COUNT:-not calculated}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Queue and cooldown logic remain enforced by the database planner." >> "$GITHUB_STEP_SUMMARY"
 
   bootstrap:
     name: Initialize private LangGraph checkpoint schema
