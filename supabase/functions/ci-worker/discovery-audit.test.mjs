@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {analyzeBoard,normalizeBoard} from './ats.mjs';
+import {analyzeBoard,normalizeBoard,boardEndpoint,greenhouseJobDetailEndpoint} from './ats.mjs';
 import {analyzeHimalayas,normalizeHimalayas} from './himalayas.mjs';
 import {safePreview} from './telemetry.mjs';
 
@@ -82,4 +82,14 @@ test('ATS scanning stays capped at 500 entries without weakening source checks',
  assert.equal(out.scanned,500);
  assert.equal(out.jobs.length,500);
  assert(!out.jobs.some(x=>x.sourceJobId==='4500'));
+});
+
+test('Greenhouse discovery is compact, review uses validated single-job URL',()=>{
+ assert.equal(boardEndpoint('greenhouse','anthropic'),'https://boards-api.greenhouse.io/v1/boards/anthropic/jobs');
+ assert.equal(greenhouseJobDetailEndpoint('anthropic','123456'),'https://boards-api.greenhouse.io/v1/boards/anthropic/jobs/123456');
+ for(const id of ['../bad','123?content=true','abc','123/456','']){
+   assert.throws(()=>greenhouseJobDetailEndpoint('anthropic',id));
+ }
+ assert.throws(()=>greenhouseJobDetailEndpoint('../anthropic','1234'));
+ assert.equal(analyzeBoard({jobs:[validGH]},'greenhouse','example','Example Ltd',now).jobs.length,1);
 });
