@@ -44,7 +44,7 @@ jobs:
               echo "- Scheduled live dispatch: enabled"
             else
               echo "- Scheduled live dispatch: disabled (CI_GITHUB_ACTIONS_LIVE must equal true)"
-              echo "::warning::Scheduled LangGraph fanout disabled; no specialists will start."
+              echo "::warning::Scheduled LangGraph fanout disabled; no specialists will start." >&2
             fi
             echo "- Database connection secret configured: $DB_PRESENT"
             echo "- Worker signing secret configured: $SIGNING_PRESENT"
