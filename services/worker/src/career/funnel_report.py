@@ -109,6 +109,20 @@ SECTIONS: list[tuple[str, str]] = [
           sum(coalesce((details->>'failures')::int,0)) as failures
         from ci_worker_runs where started_at>now()-interval '24 hours'
         group by 1,2 order by 1,2"""),
+    ("ATS board fetch failures (last 7 days, by provider and reason)", """
+        select input_preview->>'provider' as provider,
+          left(coalesce(output_preview->>'reason','(none)'),60) as reason,
+          count(*) as n, count(distinct input_preview->>'board') as boards
+        from ci_pipeline_events
+        where event_type='board_failed' and occurred_at>now()-interval '7 days'
+        group by 1,2 order by n desc limit 15"""),
+    ("Sampled posting filter reasons (last 7 days)", """
+        select agent, left(coalesce(output_preview->>'reason','(none)'),60) as reason, count(*) as n
+        from ci_pipeline_events
+        where event_type='posting_filtered' and occurred_at>now()-interval '7 days'
+        group by 1,2 order by n desc limit 15"""),
+    ("ATS board candidates awaiting approval", """
+        select state, count(*) as n from ci_ats_source_candidates group by 1 order by 1"""),
     ("Pipeline events (last 7 days, by stage, agent and event)", """
         select stage, agent, event_type, count(*) as n from ci_pipeline_events
         where occurred_at>now()-interval '7 days'
