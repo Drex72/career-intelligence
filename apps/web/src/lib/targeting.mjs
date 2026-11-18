@@ -40,5 +40,6 @@ export function targetSummary(target){
   const roles=target.role_keywords?.length?target.role_keywords.join(', '):'software engineering';
   const where=countryName(target.applicant_country)||target.applicant_country;
   const employer=target.employer_country?(' at employers based in '+countryName(target.employer_country)):'';
-  return roles+' roles open to applicants in '+where+employer+'.';
+  const text=roles+' roles open to applicants in '+where+employer+'.';
+  return text.charAt(0).toUpperCase()+text.slice(1);
 }

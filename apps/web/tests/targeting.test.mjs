@@ -24,8 +24,8 @@ test('keyword validation explains the problem', () => {
 
 test('summary names countries and falls back to the default role filter', () => {
   assert.equal(targetSummary({applicant_country: 'NG', employer_country: null, role_keywords: []}),
-    'software engineering roles open to applicants in Nigeria.');
+    'Software engineering roles open to applicants in Nigeria.');
   assert.equal(targetSummary({applicant_country: 'GH', employer_country: 'US', role_keywords: ['backend']}),
-    'backend roles open to applicants in Ghana at employers based in United States.');
+    'Backend roles open to applicants in Ghana at employers based in United States.');
   assert.equal(targetSummary(null), 'No search target saved yet.');
 });

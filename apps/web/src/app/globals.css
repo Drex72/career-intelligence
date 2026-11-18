@@ -668,7 +668,9 @@ input[aria-invalid=true]{border-color:#E5A9AE}
  .settings-group>.notice,.settings-group>.settings-field,.settings-group>.settings-grid,.settings-group>.keyword-preview,.settings-group>.field-error{margin-left:0}
  .current-target{padding:18px 16px}
  .settings-footer{padding:14px 16px}
- .target-strip{flex-wrap:wrap}
- .target-strip>a{margin-left:19px}
+ .target-strip{flex-wrap:wrap;align-items:flex-start}
+ .target-strip .summary-indicator{display:none}
+ .target-strip>a{margin-left:0}
 }
 @media(prefers-reduced-motion:reduce){.choice-chip{transition:none}}
+.basis .status,.chip-row .status,.basis-legend .status{text-transform:none}

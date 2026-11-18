@@ -8,7 +8,7 @@ import {Notice} from '@/components/WorkspaceUI';
 import {countryOptions,countryName,parseKeywords,keywordError,targetSummary} from '@/lib/targeting.mjs';
 import {safeDateLabel} from '@/lib/data.mjs';
 
-export type Target={applicant_country:string;employer_country:string|null;role_keywords:string[]};
+export type Target={applicant_country:string;employer_country:string|null;role_keywords:string[];updated_at?:string|null};
 type Preferences={
  daily_target:number;job_families:string[];seniority_levels:string[];
  work_modes:string[];sponsorship:'any'|'confirmed_required';updated_at:string|null;
@@ -91,11 +91,12 @@ export function DiscoveryPreferences(){
  }
 
  const target=resource.data?.target??null;
+ const lastSaved=[resource.data?.preferences?.updated_at,target?.updated_at].filter((d):d is string=>!!d).sort().pop()??null;
  return <section className="workspace-surface settings-surface" aria-labelledby="search-settings-heading">
   <div className="current-target">
    <span className="current-target-label">Currently searching for</span>
    <p id="search-settings-heading">{target?targetSummary(target):'Nothing yet. Save the form below to start.'}</p>
-   {resource.data?.preferences?.updated_at&&<small>Last saved {safeDateLabel(resource.data.preferences.updated_at)}</small>}
+   {lastSaved&&<small>Last saved {safeDateLabel(lastSaved)}</small>}
   </div>
   <StateNotice loading={resource.loading} error={resource.error} retry={resource.reload}/>
   {form&&<form onSubmit={e=>void save(e)} className="settings-form" noValidate>
