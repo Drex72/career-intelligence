@@ -126,6 +126,8 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_postgres_hosted_langgraph.py -v
       - name: Keep the likely-eligible tier separate from verified delivery
         run: python -m pytest services/worker/tests/integration/test_postgres_likely_tier.py -v
+      - name: Verify owner-configured country targeting and labelled job-board delivery
+        run: python -m pytest services/worker/tests/integration/test_postgres_country_targeting.py services/worker/tests/integration/test_postgres_us_worldwide_geo.py -v
   web-tests:
     runs-on: ubuntu-latest
     steps:

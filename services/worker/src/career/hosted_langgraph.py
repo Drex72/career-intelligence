@@ -95,7 +95,7 @@ def worker_handler(role: str, endpoint: str, secret: str, client: httpx.Client):
 REPORT_COUNT_KEYS = (
     "received", "normalized", "filtered", "remotive", "himalayas", "boards_scanned",
     "ats_jobs", "rejected_role", "rejected_source", "rejected_stale", "not_selected",
-    "save_failures", "candidates", "reviewed", "verified_eligible", "likely_eligible",
+    "save_failures", "location_rules", "candidates", "reviewed", "verified_eligible", "likely_eligible",
     "unknown", "ineligible", "matched", "people_processed", "drafts_prepared",
     "replies_classified", "attempts", "failures", "telemetry_failures",
 )

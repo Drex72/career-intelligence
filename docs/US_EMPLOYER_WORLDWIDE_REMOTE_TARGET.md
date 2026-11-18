@@ -44,3 +44,25 @@ The owner chose, on 2026-11-18, to list some roles separately. These are roles w
 - `ci_likely_tier(owner, limit)` lists open roles published in the last 7 days whose latest assessment is current and `likely_eligible`, filtered by owner preferences, excluding jobs already delivered and jobs the owner dismissed. For each role it shows whether official worldwide-scope or US-employer evidence exists. Those are display flags, not filters.
 - `ci_decide_likely_tier(owner, job, confirmed|dismissed)` records only the owner's own judgement. It never writes eligibility evidence, never changes an assessment and never touches `ci_daily_batch_items` or `ci_delivered_jobs`.
 - The verified daily batch (`ci_generate_daily_batch`, 0038) is unchanged. Likely roles never count toward the verified target.
+
+## Country-configurable targeting (migration 0041)
+
+The applicant country, an optional employer country and up to 8 role keywords are
+owner settings (dashboard → Discovery preferences → "Who and what to search for"),
+stored in `ci_geo_target_preferences`. Nothing in delivery is fixed to Nigeria.
+
+A job is delivered on one of two labelled bases, recorded in
+`ci_daily_batch_items.eligibility_basis`:
+
+- `official_posting` — the existing official-ATS path. Its text classifier only
+  recognises Nigeria, so it applies only while the applicant country is `NG`.
+- `job_board` — a job board's structured location rule in `ci_job_location_rules`
+  (today: Himalayas `locationRestrictions`; empty means worldwide). The rule must
+  include the applicant country or be worldwide, be unexpired (3 days), and the
+  latest official assessment must not be `ineligible`. The dashboard shows
+  "via Himalayas" with a link, as Himalayas' API terms require.
+
+Discovery searches Himalayas with the owner's country and keywords
+(`/jobs/api/search?country=..&q=..&sort=recent`), walking each query newest-first
+across runs (`ci_source_query_progress`) and stopping once results pass 7 days.
+The unkeyed shared Himalayas allowance is respected: at most 8 search pages per run.
