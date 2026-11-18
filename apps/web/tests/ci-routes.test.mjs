@@ -77,3 +77,10 @@ test('factory observability is read-only and restricted to individual UUID-shape
  assert.equal(safePath(['flow','jobs','not-a-job'],'GET'),null);
  assert.equal(safePath(['flow','events','all'],'GET'),null);
 });
+
+test('likely tier read and decision routes are allow-listed with the right methods',()=>{
+ assert.equal(safePath(['likely'],'GET'),'likely');
+ assert.equal(safePath(['likely'],'POST'),null);
+ assert.equal(safePath(['likely','decision'],'POST'),'likely/decision');
+ assert.equal(safePath(['likely','decision'],'GET'),null);
+});

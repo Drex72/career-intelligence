@@ -36,3 +36,11 @@ Source examples:
 6. Check `ci_job_matches_geo_target(job_id,owner_id)` on verified, unknown, restricted, expired and worldwide cases. Observe the new job evidence records and today's qualified delivery count.
 
 **Fail-closed behavior:** An employer with no official HQ proof or a job with no job-specific worldwide scope stays unqualified for this target, even if globally distributed marketing is promising.
+
+## Likely-eligible tier (migration 0040)
+
+The owner chose, on 2026-11-18, to list some roles separately. These are roles whose official posting says remote worldwide (`likely_eligible`, reason "Worldwide wording requires separate Nigeria hiring verification") but does not explicitly permit Nigeria. They appear in their own dashboard section, **Likely eligible — needs your confirmation**:
+
+- `ci_likely_tier(owner, limit)` lists open roles published in the last 7 days whose latest assessment is current and `likely_eligible`, filtered by owner preferences, excluding jobs already delivered and jobs the owner dismissed. For each role it shows whether official worldwide-scope or US-employer evidence exists. Those are display flags, not filters.
+- `ci_decide_likely_tier(owner, job, confirmed|dismissed)` records only the owner's own judgement. It never writes eligibility evidence, never changes an assessment and never touches `ci_daily_batch_items` or `ci_delivered_jobs`.
+- The verified daily batch (`ci_generate_daily_batch`, 0038) is unchanged. Likely roles never count toward the verified target.

@@ -86,3 +86,21 @@ test('factory event and lineage requests never become mutation routes',()=>{
  assert.equal(route('https://localhost/api/ci/flow/jobs/'+id,'POST'),null);
  assert.equal(route('https://localhost/api/ci/flow/jobs/bad','GET'),null);
 });
+
+test('likely tier is a separate owner read and a POST-only decision', () => {
+ assert.deepEqual(route('https://localhost/functions/v1/ci-api/api/ci/likely','GET'),{type:'likely'});
+ assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/likely','POST'),null);
+ assert.deepEqual(route('https://localhost/functions/v1/ci-api/api/ci/likely/decision','POST'),{type:'likelyDecision'});
+ assert.equal(route('https://localhost/functions/v1/ci-api/api/ci/likely/decision','GET'),null);
+});
+
+test('handlers never read the JSON body before it is parsed', async () => {
+ const {readFile} = await import('node:fs/promises');
+ const source = await readFile(new URL('./index.ts', import.meta.url), 'utf8');
+ const declared = source.indexOf('let body:any;');
+ assert.ok(declared > 0);
+ for (const type of ['savePreferences','likelyDecision','decideCandidate','registerSource']) {
+  const at = source.indexOf(`operation.type==='${type}'`);
+  assert.ok(at > declared, `${type} handler must follow body parsing`);
+ }
+});

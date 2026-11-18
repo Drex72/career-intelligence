@@ -7,6 +7,7 @@ import {useResource} from '@/components/useResource';
 import {ResourceTable,StateNotice} from '@/components/ResourceTable';
 import {PageHeading,SectionHeading,MetricTile,Notice,InsetLink} from '@/components/WorkspaceUI';
 import {safeDateLabel} from '@/lib/data.mjs';
+import {LikelyTier} from '@/components/LikelyTier';
 
 type Counts={companies:number;jobs:number;delivered:number;applications:number};
 type BatchItem={rank:number;job_id:string;company_name:string;title:string;apply_url:string;published_at:string|null};
@@ -68,5 +69,6 @@ export default function Overview(){
         <div className="principle-card"><span className="principle-symbol" aria-hidden="true">✓</span><div><h3>Research, not guesswork.</h3><p>Hiring eligibility is never inferred from a generic remote label, and outreach is never sent automatically.</p></div></div>
       </aside>
     </div>
+    <LikelyTier/>
   </div>;
 }
