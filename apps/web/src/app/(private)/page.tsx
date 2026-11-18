@@ -7,22 +7,33 @@ import {useResource} from '@/components/useResource';
 import {ResourceTable,StateNotice} from '@/components/ResourceTable';
 import {PageHeading,SectionHeading,MetricTile,Notice,InsetLink} from '@/components/WorkspaceUI';
 import {safeDateLabel} from '@/lib/data.mjs';
+import {countryName,targetSummary} from '@/lib/targeting.mjs';
 import {LikelyTier} from '@/components/LikelyTier';
+import type {Target} from '@/components/DiscoveryPreferences';
 
 type Counts={companies:number;jobs:number;delivered:number;applications:number};
 type BatchItem={rank:number;job_id:string;company_name:string;title:string;apply_url:string;published_at:string|null;
   eligibility_basis?:'official_posting'|'job_board';basis_source?:{name:string;url:string|null;worldwide:boolean}|null};
-function Basis({item}:{item:BatchItem}){
-  if(item.eligibility_basis!=='job_board')return <span className="status status-verified" title="The employer's own posting explicitly permits your country">Official posting</span>;
+
+/** Why this job is open to the applicant, and where that came from. */
+function Basis({item,country}:{item:BatchItem;country:string}){
+  if(item.eligibility_basis!=='job_board')return <div className="basis">
+    <span className="status status-verified" title={'The employer’s own job posting explicitly accepts applicants in '+country}>
+      <span aria-hidden="true">✓</span> Employer’s posting
+    </span>
+    <small>Names {country} in the official listing</small>
+  </div>;
   const src=item.basis_source;
-  const label=src?.worldwide?'Worldwide':'Your country listed';
-  return <span style={{display:'inline-flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-    <span className="status status-unknown" title="Location rule from a job board, not the employer's own posting">{label}</span>
-    {src?.url?<a href={src.url} rel="noopener noreferrer" target="_blank" className="muted">via Himalayas <span aria-hidden="true">↗</span></a>
-      :<span className="muted">via job board</span>}
-  </span>;
+  return <div className="basis">
+    <span className="status status-board" title="Location rule published by a job board, not by the employer. Double-check on the posting.">
+      {src?.worldwide?'Open worldwide':'Lists '+country}
+    </span>
+    <small>Per job board{src?.url?<>: <a href={src.url} rel="noopener noreferrer" target="_blank">Himalayas<span className="sr-only"> (opens in a new tab)</span> <span aria-hidden="true">↗</span></a></>:''}</small>
+  </div>;
 }
 const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+const dayLabel=new Intl.DateTimeFormat('en-GB',{timeZone:'Africa/Lagos',weekday:'long',day:'numeric',month:'long'}).format(new Date());
+
 export default function Overview(){
   const session=useCareerSession();
   const [generating,setGenerating]=useState(false);
@@ -30,57 +41,82 @@ export default function Overview(){
   const [batchError,setBatchError]=useState('');
   const stats=useResource<Counts>('metrics');
   const batch=useResource<{items:BatchItem[]}>('batches/'+day);
+  const prefs=useResource<{target:Target|null}>('preferences');
+  const target=prefs.data?.target??null;
+  const country=countryName(target?.applicant_country)??'your country';
+  const items=batch.data?.items??[];
+  const hasBoard=items.some(i=>i.eligibility_basis==='job_board');
   async function generateBatch(){
     setGenerating(true);setBatchError('');setBatchNotice('');
     try{
       const result=await ciFetch<{inserted:number;note:string}>('batches/generate',session,{method:'POST'});
-      setBatchNotice(result.inserted===0?'No new verified eligible employers were available.':'Added '+result.inserted+' new eligible employers. '+result.note);
+      setBatchNotice(result.inserted===0
+        ?'No new roles passed every check. Broader role keywords, or “Any country” for employer headquarters, will find more.'
+        :'Added '+result.inserted+' new '+(result.inserted===1?'role':'roles')+' to today’s list.');
       batch.reload();stats.reload();
-    }catch(error){setBatchError(error instanceof Error?error.message:'Unable to generate batch');}
+    }catch(error){setBatchError(error instanceof Error?error.message:'Could not build today’s list');}
     finally{setGenerating(false);}
   }
   const metrics=[
-    {label:'Discovered companies',value:stats.data?.companies??'—',hint:'Known employer records'},
-    {label:'Open job records',value:stats.data?.jobs??'—',hint:'Across connected sources'},
-    {label:'Companies delivered',value:stats.data?.delivered??'—',hint:'Evidence-gated recommendations'},
-    {label:'Applications tracked',value:stats.data?.applications??'—',hint:'Recorded manually'},
+    {label:'Employers found',value:stats.data?.companies??'—',hint:'From all connected sources'},
+    {label:'Open job records',value:stats.data?.jobs??'—',hint:'Before eligibility checks'},
+    {label:'Employers recommended',value:stats.data?.delivered??'—',hint:'Across all daily lists, never repeated'},
+    {label:'Applications tracked',value:stats.data?.applications??'—',hint:'Recorded by you'},
   ];
   return <div className="overview-page">
-    <PageHeading title="Your career, in focus." description="A clear view of the opportunities you've found, the evidence behind them, and what needs your attention." meta={'WORKSPACE / '+day}
+    <PageHeading title="Your career, in focus." description="Roles that are open to you, why each one qualifies, and what needs your attention." meta={'WORKSPACE / '+dayLabel.toUpperCase()}
       action={<Link className="button-primary" href="/opportunities">Explore opportunities <span aria-hidden="true">→</span></Link>}/>
-    <div className="summary-strip" role="note"><span className="summary-indicator" aria-hidden="true"/><span>Only positions with verified hiring eligibility can enter your daily recommendations.</span><Link href="/operations">Review agent activity <span aria-hidden="true">↗</span></Link></div>
+    <div className="target-strip" role="note">
+      <span className="summary-indicator" aria-hidden="true"/>
+      <span><span className="target-strip-label">Searching for</span>{prefs.loading?'Loading your settings…':targetSummary(target)}</span>
+      <Link href="/settings">Change <span aria-hidden="true">→</span></Link>
+    </div>
+    {target?.employer_country&&<Notice title={'Employer headquarters is limited to '+countryName(target.employer_country)}>
+      Jobs only qualify once that employer’s country is confirmed from its own website, which is rare, so your list may stay empty. <Link href="/settings" className="text-link">Set it to “Any country”</Link> to see every role open to you.
+    </Notice>}
     <section aria-label="Workspace metrics" className="metric-layout">
       {metrics.map(metric=><MetricTile key={metric.label} {...metric}/>)}
     </section>
     <StateNotice loading={stats.loading} error={stats.error} retry={stats.reload}/>
     <div className="overview-columns">
       <section className="workspace-surface recommendations-surface">
-        <SectionHeading title="Today's recommendations" description="Evidence-verified roles from employers you haven't been sent before."
-          action={<button type="button" className="button-secondary" disabled={generating} onClick={()=>void generateBatch()}>{generating?'Generating…':'Generate batch'}</button>}/>
+        <SectionHeading title="Today’s list" description={'One role per employer you haven’t been sent before. Each row says why it’s open to applicants in '+country+'.'}
+          action={<button type="button" className="button-secondary" disabled={generating} onClick={()=>void generateBatch()}
+            title="Lists build automatically at 07:00 Lagos time. This adds any new qualifying roles now.">{generating?'Checking…':'Check for new roles'}</button>}/>
         {batchNotice&&<Notice tone="success">{batchNotice}</Notice>}
         {batchError&&<Notice tone="danger">{batchError}</Notice>}
         <StateNotice loading={batch.loading} error={batch.error} retry={batch.reload}/>
-        {batch.data&&<ResourceTable rowKey={r=>r.job_id} ariaLabel="Today's recommended employers" items={batch.data.items} columns={[
+        {batch.data&&<ResourceTable rowKey={r=>r.job_id} ariaLabel="Today’s recommended roles" items={items} columns={[
           {key:'company',label:'Employer',render:r=><div className="table-primary"><span className="company-avatar" aria-hidden="true">{r.company_name.charAt(0).toUpperCase()}</span><strong>{r.company_name}</strong></div>},
           {key:'job',label:'Role',render:r=><span className="role-name">{r.title}</span>},
-          {key:'published',label:'Published',render:r=><span className="muted">{safeDateLabel(r.published_at)}</span>},
-          {key:'basis',label:'Why eligible',render:r=><Basis item={r}/>},
-          {key:'link',label:'Next step',render:r=>r.apply_url?.startsWith("https://")?<a href={r.apply_url} rel="noopener noreferrer" target="_blank" className="table-action">View posting <span aria-hidden="true">↗</span></a>:<span className="muted">Link unavailable</span>},
-        ]} empty="No verified eligible employers were delivered today. You can browse current opportunities while the system continues researching."/>}
-        <div className="surface-foot"><InsetLink href="/opportunities">See all opportunities</InsetLink></div>
+          {key:'basis',label:'Why it’s open to you',render:r=><Basis item={r} country={country}/>},
+          {key:'published',label:'Posted',render:r=><span className="muted">{safeDateLabel(r.published_at)}</span>},
+          {key:'link',label:'',render:r=>r.apply_url?.startsWith('https://')
+            ?<a href={r.apply_url} rel="noopener noreferrer" target="_blank" className="table-action">Apply<span className="sr-only"> to {r.title} at {r.company_name} (opens in a new tab)</span> <span aria-hidden="true">↗</span></a>
+            :<span className="muted">No link</span>},
+        ]} empty="No roles passed every check today. New search results arrive through the day; use “Check for new roles” or broaden your Search settings."/>}
+        {items.length>0&&<dl className="basis-legend">
+          <div><dt><span className="status status-verified">✓ Employer’s posting</span></dt><dd>The employer’s own listing names {country}. Strongest evidence.</dd></div>
+          <div><dt><span className="status status-board">Job board</span></dt><dd>A job board says the role is open worldwide or lists {country}. Confirm on the posting before applying.</dd></div>
+        </dl>}
+        <div className="surface-foot">
+          <InsetLink href="/opportunities">See all opportunities</InsetLink>
+          {hasBoard&&<span className="source-credit">Job-board listings from <a href="https://himalayas.app" rel="noopener noreferrer" target="_blank">Himalayas</a></span>}
+        </div>
       </section>
       <aside className="overview-aside" aria-label="Next steps">
         <div className="next-steps-card">
           <span className="aside-kicker">YOUR WORKFLOW</span><h2>Keep things moving</h2><p>Pick up where you left off. Every step is under your control.</p>
           <div className="quick-links">
-            <InsetLink href="/applications"><span><strong>Track applications</strong><small>Update the status of jobs you've applied to</small></span></InsetLink>
+            <InsetLink href="/settings"><span><strong>Adjust search settings</strong><small>Country, role keywords and daily list size</small></span></InsetLink>
+            <InsetLink href="/applications"><span><strong>Track applications</strong><small>Update the status of jobs you’ve applied to</small></span></InsetLink>
             <InsetLink href="/outreach"><span><strong>Prepare outreach</strong><small>Draft messages for sourced contacts</small></span></InsetLink>
             <InsetLink href="/knowledge"><span><strong>Review your knowledge base</strong><small>Keep your professional context current</small></span></InsetLink>
           </div>
         </div>
-        <div className="principle-card"><span className="principle-symbol" aria-hidden="true">✓</span><div><h3>Research, not guesswork.</h3><p>Hiring eligibility is never inferred from a generic remote label, and outreach is never sent automatically.</p></div></div>
+        <div className="principle-card"><span className="principle-symbol" aria-hidden="true">✓</span><div><h3>Research, not guesswork.</h3><p>A “remote” label alone never qualifies a job, every recommendation says where its evidence came from, and outreach is never sent automatically.</p></div></div>
       </aside>
     </div>
-    <LikelyTier/>
+    <LikelyTier country={country} employerCountry={target?.employer_country??null}/>
   </div>;
 }
