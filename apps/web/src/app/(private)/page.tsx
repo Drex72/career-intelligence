@@ -15,6 +15,13 @@ type Counts={companies:number;jobs:number;delivered:number;applications:number};
 type BatchItem={rank:number;job_id:string;company_name:string;title:string;apply_url:string;published_at:string|null;
   eligibility_basis?:'official_posting'|'job_board'|'employer_worldwide';basis_source?:{name:string;url:string|null;worldwide:boolean}|null};
 
+/** Job boards that supply location rules, with the credit link each board asks for. */
+const BOARDS:Record<string,{label:string;home:string}>={
+  himalayas:{label:'Himalayas',home:'https://himalayas.app'},
+  remotive:{label:'Remotive',home:'https://remotive.com'},
+  jobicy:{label:'Jobicy',home:'https://jobicy.com'},
+  weworkremotely:{label:'We Work Remotely',home:'https://weworkremotely.com'},
+};
 /** Why this job is open to the applicant, and where that came from. */
 function Basis({item,country}:{item:BatchItem;country:string}){
   if(item.eligibility_basis==='employer_worldwide')return <div className="basis">
@@ -30,11 +37,12 @@ function Basis({item,country}:{item:BatchItem;country:string}){
     <small>Names {country} in the official listing</small>
   </div>;
   const src=item.basis_source;
+  const board=src?BOARDS[src.name]?.label??'job board':'job board';
   return <div className="basis">
     <span className="status status-board" title="Location rule published by a job board, not by the employer. Double-check on the posting.">
       {src?.worldwide?'Open worldwide':'Lists '+country}
     </span>
-    <small>Per job board{src?.url?<>: <a href={src.url} rel="noopener noreferrer" target="_blank">Himalayas<span className="sr-only"> (opens in a new tab)</span> <span aria-hidden="true">↗</span></a></>:''}</small>
+    <small>Per {src?.url?<a href={src.url} rel="noopener noreferrer" target="_blank">{board}<span className="sr-only"> (opens in a new tab)</span> <span aria-hidden="true">↗</span></a>:board}</small>
   </div>;
 }
 const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -51,7 +59,8 @@ export default function Overview(){
   const target=prefs.data?.target??null;
   const country=countryName(target?.applicant_country)??'your country';
   const items=batch.data?.items??[];
-  const hasBoard=items.some(i=>i.eligibility_basis==='job_board');
+  const boardsUsed=[...new Set(items.filter(i=>i.eligibility_basis==='job_board'&&i.basis_source&&BOARDS[i.basis_source.name])
+    .map(i=>i.basis_source!.name))];
   async function generateBatch(){
     setGenerating(true);setBatchError('');setBatchNotice('');
     try{
@@ -104,11 +113,12 @@ export default function Overview(){
         {items.length>0&&<dl className="basis-legend">
           <div><dt><span className="status status-verified">✓ Employer’s posting</span></dt><dd>The employer’s own listing names {country}. Strongest evidence.</dd></div>
           <div><dt><span className="status status-worldwide">Employer says worldwide</span></dt><dd>The employer’s own listing says remote worldwide but doesn’t name {country}. Worth confirming before applying.</dd></div>
-          <div><dt><span className="status status-board">Job board</span></dt><dd>A job board says the role is open worldwide or lists {country}. Confirm on the posting before applying.</dd></div>
+          <div><dt><span className="status status-board">Job board</span></dt><dd>A job board (Himalayas, Remotive, Jobicy or We Work Remotely) says the role is open worldwide or lists {country}. Confirm on the posting before applying.</dd></div>
         </dl>}
         <div className="surface-foot">
           <InsetLink href="/opportunities">See all opportunities</InsetLink>
-          {hasBoard&&<span className="source-credit">Job-board listings from <a href="https://himalayas.app" rel="noopener noreferrer" target="_blank">Himalayas</a></span>}
+          {boardsUsed.length>0&&<span className="source-credit">Job-board listings from {boardsUsed.map((name,i)=><span key={name}>
+            {i>0&&(i===boardsUsed.length-1?' and ':', ')}<a href={BOARDS[name].home} rel="noopener noreferrer" target="_blank">{BOARDS[name].label}</a></span>)}</span>}
         </div>
       </section>
       <aside className="overview-aside" aria-label="Next steps">
