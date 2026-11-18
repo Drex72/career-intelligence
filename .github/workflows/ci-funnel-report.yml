@@ -1,0 +1,30 @@
+name: Career Intelligence — funnel snapshot (read-only)
+on:
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: career-intelligence-funnel-report
+  cancel-in-progress: true
+jobs:
+  snapshot:
+    # Secrets are available only to trusted main-branch schedule/dispatch runs.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install worker
+        run: python -m pip install -q -e 'services/worker[agents]'
+      - name: Aggregate funnel counts (read-only transactions, no row contents)
+        env:
+          DATABASE_URL: ${{ secrets.CI_ACTIONS_DATABASE_URL }}
+          PYTHONPATH: services/worker/src
+        run: python -m career.funnel_report
