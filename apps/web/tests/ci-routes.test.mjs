@@ -84,3 +84,8 @@ test('likely tier read and decision routes are allow-listed with the right metho
  assert.equal(safePath(['likely','decision'],'POST'),'likely/decision');
  assert.equal(safePath(['likely','decision'],'GET'),null);
 });
+
+test('country target settings save is POST-only',()=>{
+ assert.equal(safePath(['preferences','target'],'POST'),'preferences/target');
+ assert.equal(safePath(['preferences','target'],'GET'),null);
+});

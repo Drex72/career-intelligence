@@ -10,7 +10,18 @@ import {safeDateLabel} from '@/lib/data.mjs';
 import {LikelyTier} from '@/components/LikelyTier';
 
 type Counts={companies:number;jobs:number;delivered:number;applications:number};
-type BatchItem={rank:number;job_id:string;company_name:string;title:string;apply_url:string;published_at:string|null};
+type BatchItem={rank:number;job_id:string;company_name:string;title:string;apply_url:string;published_at:string|null;
+  eligibility_basis?:'official_posting'|'job_board';basis_source?:{name:string;url:string|null;worldwide:boolean}|null};
+function Basis({item}:{item:BatchItem}){
+  if(item.eligibility_basis!=='job_board')return <span className="status status-verified" title="The employer's own posting explicitly permits your country">Official posting</span>;
+  const src=item.basis_source;
+  const label=src?.worldwide?'Worldwide':'Your country listed';
+  return <span style={{display:'inline-flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+    <span className="status status-unknown" title="Location rule from a job board, not the employer's own posting">{label}</span>
+    {src?.url?<a href={src.url} rel="noopener noreferrer" target="_blank" className="muted">via Himalayas <span aria-hidden="true">↗</span></a>
+      :<span className="muted">via job board</span>}
+  </span>;
+}
 const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 export default function Overview(){
   const session=useCareerSession();
@@ -53,6 +64,7 @@ export default function Overview(){
           {key:'company',label:'Employer',render:r=><div className="table-primary"><span className="company-avatar" aria-hidden="true">{r.company_name.charAt(0).toUpperCase()}</span><strong>{r.company_name}</strong></div>},
           {key:'job',label:'Role',render:r=><span className="role-name">{r.title}</span>},
           {key:'published',label:'Published',render:r=><span className="muted">{safeDateLabel(r.published_at)}</span>},
+          {key:'basis',label:'Why eligible',render:r=><Basis item={r}/>},
           {key:'link',label:'Next step',render:r=>r.apply_url?.startsWith("https://")?<a href={r.apply_url} rel="noopener noreferrer" target="_blank" className="table-action">View posting <span aria-hidden="true">↗</span></a>:<span className="muted">Link unavailable</span>},
         ]} empty="No verified eligible employers were delivered today. You can browse current opportunities while the system continues researching."/>}
         <div className="surface-foot"><InsetLink href="/opportunities">See all opportunities</InsetLink></div>

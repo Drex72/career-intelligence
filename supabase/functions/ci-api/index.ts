@@ -219,13 +219,19 @@ Deno.serve(async (request:Request)=>{
         }))});
       }
       if(path==='preferences'){
-        const prefs=check(await db.from('ci_discovery_preferences')
-          .select('daily_target,job_families,seniority_levels,work_modes,sponsorship,updated_at')
-          .eq('owner_user_id',owner).maybeSingle());
-        return reply(200,{preferences:prefs||{
+        const [prefs,target]=await Promise.all([
+          db.from('ci_discovery_preferences')
+            .select('daily_target,job_families,seniority_levels,work_modes,sponsorship,updated_at')
+            .eq('owner_user_id',owner).maybeSingle(),
+          db.from('ci_geo_target_preferences')
+            .select('applicant_country,employer_country,role_keywords,updated_at')
+            .eq('owner_user_id',owner).maybeSingle()
+        ]);
+        return reply(200,{preferences:check(prefs)||{
           daily_target:25,job_families:['any'],seniority_levels:['any'],
           work_modes:['any'],sponsorship:'any',updated_at:null
-        },note:'Unknown work mode or visa support is never counted as a verified match.'});
+        },target:check(target)||null,
+          note:'Unknown work mode or visa support is never counted as a verified match.'});
       }
       if(path==='metrics'){
         const [companies,jobs,delivered,applications]=await Promise.all([
@@ -459,8 +465,21 @@ Deno.serve(async (request:Request)=>{
     if(operation.type==='batch'){
       const bs=list(check(await db.from('ci_daily_batches').select('id').eq('owner_user_id',owner).eq('local_date',operation.day).limit(1)));
       if(!bs.length)return reply(200,{items:[]});
-      const xs=list(check(await db.from('ci_daily_batch_items').select('job_id,company_id,rank,ci_jobs(title,apply_url,published_at),ci_companies(legal_name)').eq('batch_id',bs[0].id).order('rank').limit(100)));
-      return reply(200,{items:xs.map((x:any)=>({job_id:x.job_id,company_id:x.company_id,rank:x.rank,title:x.ci_jobs?.title||'',apply_url:x.ci_jobs?.apply_url||'',published_at:x.ci_jobs?.published_at||null,company_name:x.ci_companies?.legal_name||''}))});
+      const xs=list(check(await db.from('ci_daily_batch_items').select('job_id,company_id,rank,eligibility_basis,ci_jobs(title,apply_url,published_at,updated_at),ci_companies(legal_name)').eq('batch_id',bs[0].id).order('rank').limit(100)));
+      const ids=xs.map((x:any)=>x.job_id);
+      const rules=ids.length?list(check(await db.from('ci_job_location_rules')
+        .select('job_id,source_name,source_url,worldwide').in('job_id',ids).limit(100))):[];
+      const ruleFor=new Map(rules.map((r:any)=>[r.job_id,r]));
+      return reply(200,{items:xs.map((x:any)=>{
+        const rule:any=ruleFor.get(x.job_id);
+        return {job_id:x.job_id,company_id:x.company_id,rank:x.rank,title:x.ci_jobs?.title||'',
+          apply_url:x.ci_jobs?.apply_url||'',published_at:x.ci_jobs?.published_at||x.ci_jobs?.updated_at||null,
+          company_name:x.ci_companies?.legal_name||'',
+          eligibility_basis:x.eligibility_basis||'official_posting',
+          basis_source:x.eligibility_basis==='job_board'&&rule?{name:rule.source_name,
+            url:typeof rule.source_url==='string'&&rule.source_url.startsWith('https://')?rule.source_url:null,
+            worldwide:rule.worldwide===true}:null};
+      })});
     }
     if(operation.type==='likely'){
       // Separate tier: worldwide wording without explicit Nigeria permission.
@@ -573,6 +592,19 @@ Deno.serve(async (request:Request)=>{
       }));
       if(!saved)return reply(409,{error:'Preferences could not be saved'});
       return reply(200,{saved:true,note:'Future recommendation batches use these limits. Previously delivered items are never silently changed.'});
+    }
+    if(operation.type==='saveTarget'){
+      const keywords=body?.role_keywords;
+      if(!body||typeof body.applicant_country!=='string'||!/^[A-Z]{2}$/.test(body.applicant_country)||
+        !(body.employer_country===null||(typeof body.employer_country==='string'&&/^[A-Z]{2}$/.test(body.employer_country)))||
+        !Array.isArray(keywords)||keywords.length>8||
+        !keywords.every((k:unknown)=>typeof k==='string'&&/^[A-Za-z0-9 +#./-]{2,60}$/.test(k.trim())))
+        return reply(422,{error:'Invalid country or role keywords'});
+      const saved=check(await db.rpc('ci_save_geo_target',{
+        p_owner:owner,p_applicant_country:body.applicant_country,
+        p_employer_country:body.employer_country,p_role_keywords:keywords.map((k:string)=>k.trim())}));
+      if(!saved)return reply(409,{error:'Target could not be saved'});
+      return reply(200,{saved:true,note:'Discovery and future recommendation batches use this country and these roles.'});
     }
     if(operation.type==='likelyDecision'){
       if(!body||!isUuid(body.job_id)||!['confirmed','dismissed'].includes(body.decision))

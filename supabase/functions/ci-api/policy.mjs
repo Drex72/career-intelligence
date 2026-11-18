@@ -18,6 +18,7 @@ export function route(url, method) {
   if (method === 'POST' && path === 'sources/scan') return {type:'scanSource'};
   if (method === 'POST' && path === 'eligibility/review') return {type:'reviewEligibility'};
   if (method === 'POST' && path === 'preferences') return {type:'savePreferences'};
+  if (method === 'POST' && path === 'preferences/target') return {type:'saveTarget'};
   if (method === 'POST' && path === 'discover') return {type:'discover'};
   if (method === 'POST' && path === 'batches/generate') return {type:'generateBatch'};
   if (method === 'GET' && path === 'likely') return {type:'likely'};

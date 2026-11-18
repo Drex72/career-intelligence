@@ -10,6 +10,7 @@ def test_owner_us_worldwide_filter_rejects_unproven_employer_and_remote_scope():
     slug=uuid4().hex[:12]
     owner=uuid4()
     with psycopg.connect(os.environ["PG_TEST_DSN"],autocommit=True) as db:
+        db.execute("insert into auth.users(id) values(%s) on conflict do nothing",(owner,))
         db.execute("""insert into ci_discovery_preferences(owner_user_id,daily_target)
           values(%s,100)""",(owner,))
         db.execute("""insert into ci_geo_target_preferences
@@ -47,6 +48,7 @@ def test_owner_geo_filter_rejects_usa_only_and_expired_scope():
     slug=uuid4().hex[:10]
     owner=uuid4()
     with psycopg.connect(os.environ["PG_TEST_DSN"],autocommit=True) as db:
+        db.execute("insert into auth.users(id) values(%s) on conflict do nothing",(owner,))
         db.execute("insert into ci_discovery_preferences(owner_user_id) values(%s)",(owner,))
         db.execute("""insert into ci_geo_target_preferences(owner_user_id,employer_country,applicant_country,remote_scope)
           values(%s,'US','NG','worldwide')""",(owner,))

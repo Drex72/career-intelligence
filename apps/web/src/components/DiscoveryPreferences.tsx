@@ -4,6 +4,7 @@ import {ciFetch} from '@/lib/api';
 import {useResource} from '@/components/useResource';
 import {useCareerSession} from '@/components/AuthGate';
 import {StateNotice} from '@/components/ResourceTable';
+import {TargetSettings,type Target} from '@/components/TargetSettings';
 
 type Preferences={
  daily_target:number;job_families:string[];seniority_levels:string[];
@@ -39,7 +40,7 @@ function ChoiceGroup({label,options,selected,onChange}:{
 
 export function DiscoveryPreferences(){
  const session=useCareerSession();
- const resource=useResource<{preferences:Preferences}>('preferences');
+ const resource=useResource<{preferences:Preferences;target:Target|null}>('preferences');
  const [value,setValue]=useState<Preferences>(defaults);
  const [saving,setSaving]=useState(false);
  const [error,setError]=useState('');
@@ -64,11 +65,12 @@ export function DiscoveryPreferences(){
    <p className="muted">Set the daily recommendation target and what qualifies. Only future batches use new settings.</p>
   </div></div>
   <StateNotice loading={resource.loading} error={resource.error} retry={resource.reload}/>
+  {resource.data&&<TargetSettings target={resource.data.target??null} onSaved={resource.reload}/>}
   <form onSubmit={e=>void save(e)}>
    <label htmlFor="ci-daily-target"><strong>Companies per day: {value.daily_target}</strong></label>
    <input id="ci-daily-target" type="range" min={1} max={100} step={1}
       value={value.daily_target} onChange={e=>setValue(v=>({...v,daily_target:Number(e.target.value)}))}/>
-   <p className="muted">This is a maximum, not a promised count. Employers must have current, source-backed Nigeria hiring eligibility.</p>
+   <p className="muted">This is a maximum, not a promised count. Each job must be open to your country, either in the employer’s own posting or in a job board’s location rule, and is labelled with which.</p>
    <ChoiceGroup label="Job families" options={families} selected={value.job_families}
      onChange={job_families=>setValue(v=>({...v,job_families}))}/>
    <ChoiceGroup label="Seniority levels" options={levels} selected={value.seniority_levels}

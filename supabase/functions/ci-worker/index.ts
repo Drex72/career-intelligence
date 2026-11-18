@@ -12,7 +12,10 @@ import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
 import {safePreview} from './telemetry.mjs';
 import {SourceFetchFailure,httpSourceFailure,sourceFailureReason} from './diagnostics.mjs';
 import {runPeople,runOutreach,runConversation} from './specialists.mjs';
-import {analyzeHimalayas,safeHimalayasCursor,isSoftwareRole} from './himalayas.mjs';
+import {analyzeHimalayas,safeHimalayasCursor,isSoftwareRole,himalayasSearchURL} from './himalayas.mjs';
+// Unkeyed shared Himalayas allowance: keep each run small; daily walks resume across runs.
+const HIMALAYAS_PAGES_PER_QUERY=4;
+const HIMALAYAS_SEARCH_PAGES_PER_RUN=8;
 
 const headers={'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'};
 const response=(status:number,body:unknown)=>new Response(JSON.stringify(body),{status,headers});
@@ -100,7 +103,7 @@ Deno.serve(async (request:Request)=>{
   }
   const report={remotive:0,himalayas:0,ats_jobs:0,boards_scanned:0,reviewed:0,verified_eligible:0,likely_eligible:0,unknown:0,ineligible:0,candidates:0,matched:0,
     attempts:0,failures:0,telemetry_failures:0,received:0,normalized:0,filtered:0,
-    rejected_role:0,rejected_source:0,rejected_stale:0,not_selected:0,save_failures:0,
+    rejected_role:0,rejected_source:0,rejected_stale:0,not_selected:0,save_failures:0,location_rules:0,
     people_processed:0,drafts_prepared:0,replies_classified:0};
   try{
     const run=checked(await db.from('ci_worker_runs')
@@ -170,6 +173,81 @@ Deno.serve(async (request:Request)=>{
     }
     // Himalayas API refreshes once daily. Respect its shared unauthenticated
     // quota and keep official Apply URLs and provider attribution unchanged.
+    async function ingestHimalayas(audit:any,query:string){
+      const jobs=audit.jobs;
+      report.received+=audit.scanned;
+      report.normalized+=jobs.length;
+      report.filtered+=audit.scanned-jobs.length;
+      report.rejected_role+=audit.excluded.role;
+      report.rejected_source+=audit.excluded.source;
+      report.rejected_stale+=audit.excluded.stale;
+      const priorIngested=report.himalayas;
+      for(const job of jobs){
+        const saved=await db.rpc('ci_ingest_himalayas_job',{
+          p_guid:job.guid,p_company:job.company,p_title:job.title,
+          p_application_link:job.applicationLink,p_published_at:job.lastUpdatedAt,
+          p_locations:job.locations
+        });
+        if(saved.error||!saved.data){report.failures++;report.save_failures++;continue;}
+        report.himalayas++;
+        // Structured job-board location rule, labelled by source; never official evidence.
+        if(job.rule){
+          const rule=await db.rpc('ci_record_job_location_rule',{
+            p_job_id:saved.data,p_source_name:'himalayas',p_source_url:job.guid,
+            p_worldwide:job.rule.worldwide,p_countries:job.rule.countries
+          });
+          if(rule.error||!rule.data)report.save_failures++;else report.location_rules++;
+        }
+        // An official ATS application link is a proposal, not verified employer identity.
+        // The user must approve it in the source-candidate queue before scanning.
+        if(report.candidates<10){
+          for(const candidate of candidateBoards(job.applicationLink+' '+job.description,job.company,job.guid)){
+            const proposed=await db.rpc('ci_suggest_ats_board',{
+              p_provider:candidate.provider,p_board_slug:candidate.slug,
+              p_company_name:candidate.company,p_evidence_url:candidate.evidenceURL
+            });
+            if(!proposed.error&&proposed.data)report.candidates++;
+            if(report.candidates>=10)break;
+          }
+        }
+      }
+      for(const example of audit.samples)await recordStage('sources','himalayas_filter','posting_filtered',
+        {provider:'himalayas',title:example.title,format:'remote_feed'},
+        {reason:example.reason,status:'rejected'});
+      await recordStage('sources','himalayas_feed','source_screened',
+        {provider:'himalayas',format:'remote_feed',query,received:audit.scanned},
+        {accepted:jobs.length,ingested:report.himalayas-priorIngested,
+         rejected:audit.scanned-jobs.length,rejected_role:audit.excluded.role,
+         rejected_source:audit.excluded.source,rejected_stale:audit.excluded.stale,
+         format:'normalized_job'});
+    }
+    // Owner-configured search: applicant country and role keywords come from settings.
+    // Each query is walked newest-first across runs and stops once results pass 7 days.
+    const targets=checked(await db.from('ci_geo_target_preferences')
+      .select('applicant_country,role_keywords').limit(5));
+    let searchPages=0;
+    for(const target of (targets||[]) as any[]){
+      const keywords:string[]=Array.isArray(target.role_keywords)?target.role_keywords.slice(0,8):[];
+      const queries:string[]=keywords.length?keywords.slice(0,4):[''];
+      for(const keyword of queries){
+        if(searchPages>=HIMALAYAS_SEARCH_PAGES_PER_RUN)break;
+        const key='himalayas:'+target.applicant_country+':'+(keyword||'*');
+        let page=checked(await db.rpc('ci_claim_source_query',{p_key:key,p_cooldown_seconds:600}));
+        if(!page)continue;
+        let done=false;
+        for(let i=0;i<HIMALAYAS_PAGES_PER_QUERY&&searchPages<HIMALAYAS_SEARCH_PAGES_PER_RUN;i++){
+          report.attempts++;searchPages++;
+          try{
+            const payload=await fetchJSON(himalayasSearchURL(target.applicant_country,keyword,page));
+            const audit=analyzeHimalayas(payload,now(),keywords);
+            await ingestHimalayas(audit,keyword?'search:keyword':'search:country');
+            if(audit.scanned<20||audit.excluded.stale===audit.scanned){done=true;break;}
+            page++;
+          }catch{report.failures++;break;}
+        }
+        await db.rpc('ci_advance_source_query',{p_key:key,p_next_page:done?0:page});
+      }
+    }
     const himalayasSlot=checked(await db.rpc('ci_claim_feed_slot',{p_action:'himalayas'}));
     if(himalayasSlot){
       let cursor:string|null=null;
@@ -179,45 +257,7 @@ Deno.serve(async (request:Request)=>{
         try{
           const endpoint='https://himalayas.app/jobs/api?limit=20'+(cursor?'&cursor='+encodeURIComponent(cursor):'');
           const page=await fetchJSON(endpoint);
-          const audit=analyzeHimalayas(page);
-          const jobs=audit.jobs;
-          report.received+=audit.scanned;
-          report.normalized+=jobs.length;
-          report.filtered+=audit.scanned-jobs.length;
-          report.rejected_role+=audit.excluded.role;
-          report.rejected_source+=audit.excluded.source;
-          report.rejected_stale+=audit.excluded.stale;
-          const priorIngested=report.himalayas;
-          for(const job of jobs){
-            const saved=await db.rpc('ci_ingest_himalayas_job',{
-              p_guid:job.guid,p_company:job.company,p_title:job.title,
-              p_application_link:job.applicationLink,p_published_at:job.lastUpdatedAt,
-              p_locations:job.locations
-            });
-            if(saved.error||!saved.data){report.failures++;report.save_failures++;continue;}
-            report.himalayas++;
-            // An official ATS application link is a proposal, not verified employer identity.
-            // The user must approve it in the source-candidate queue before scanning.
-            if(report.candidates<10){
-              for(const candidate of candidateBoards(job.applicationLink+' '+job.description,job.company,job.guid)){
-                const proposed=await db.rpc('ci_suggest_ats_board',{
-                  p_provider:candidate.provider,p_board_slug:candidate.slug,
-                  p_company_name:candidate.company,p_evidence_url:candidate.evidenceURL
-                });
-                if(!proposed.error&&proposed.data)report.candidates++;
-                if(report.candidates>=10)break;
-              }
-            }
-          }
-          for(const example of audit.samples)await recordStage('sources','himalayas_filter','posting_filtered',
-            {provider:'himalayas',title:example.title,format:'remote_feed'},
-            {reason:example.reason,status:'rejected'});
-          await recordStage('sources','himalayas_feed','source_screened',
-            {provider:'himalayas',format:'remote_feed',received:audit.scanned},
-            {accepted:jobs.length,ingested:report.himalayas-priorIngested,
-             rejected:audit.scanned-jobs.length,rejected_role:audit.excluded.role,
-             rejected_source:audit.excluded.source,rejected_stale:audit.excluded.stale,
-             format:'normalized_job'});
+          await ingestHimalayas(analyzeHimalayas(page),'browse');
           const next=safeHimalayasCursor(page?.nextCursor,seenCursors);
           if(!next)break;
           seenCursors.add(next);
