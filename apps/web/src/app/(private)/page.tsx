@@ -13,10 +13,16 @@ import type {Target} from '@/components/DiscoveryPreferences';
 
 type Counts={companies:number;jobs:number;delivered:number;applications:number};
 type BatchItem={rank:number;job_id:string;company_name:string;title:string;apply_url:string;published_at:string|null;
-  eligibility_basis?:'official_posting'|'job_board';basis_source?:{name:string;url:string|null;worldwide:boolean}|null};
+  eligibility_basis?:'official_posting'|'job_board'|'employer_worldwide';basis_source?:{name:string;url:string|null;worldwide:boolean}|null};
 
 /** Why this job is open to the applicant, and where that came from. */
 function Basis({item,country}:{item:BatchItem;country:string}){
+  if(item.eligibility_basis==='employer_worldwide')return <div className="basis">
+    <span className="status status-worldwide" title={'The employer’s own job posting says the role is remote worldwide. It does not name '+country+'.'}>
+      Employer says worldwide
+    </span>
+    <small>Official posting; doesn’t name {country}</small>
+  </div>;
   if(item.eligibility_basis!=='job_board')return <div className="basis">
     <span className="status status-verified" title={'The employer’s own job posting explicitly accepts applicants in '+country}>
       <span aria-hidden="true">✓</span> Employer’s posting
@@ -80,9 +86,9 @@ export default function Overview(){
     <StateNotice loading={stats.loading} error={stats.error} retry={stats.reload}/>
     <div className="overview-columns">
       <section className="workspace-surface recommendations-surface">
-        <SectionHeading title="Today’s list" description={'One role per employer you haven’t been sent before. Each row says why it’s open to applicants in '+country+'.'}
+        <SectionHeading title="Today’s list" description={'New roles you haven’t been sent before, added automatically through the day. Each row says why it’s open to applicants in '+country+'.'}
           action={<button type="button" className="button-secondary" disabled={generating} onClick={()=>void generateBatch()}
-            title="Lists build automatically at 07:00 Lagos time. This adds any new qualifying roles now.">{generating?'Checking…':'Check for new roles'}</button>}/>
+            title="The list builds at 07:00 Lagos time and tops itself up every hour. This checks right now.">{generating?'Checking…':'Check for new roles'}</button>}/>
         {batchNotice&&<Notice tone="success">{batchNotice}</Notice>}
         {batchError&&<Notice tone="danger">{batchError}</Notice>}
         <StateNotice loading={batch.loading} error={batch.error} retry={batch.reload}/>
@@ -97,6 +103,7 @@ export default function Overview(){
         ]} empty="No roles passed every check today. New search results arrive through the day; use “Check for new roles” or broaden your Search settings."/>}
         {items.length>0&&<dl className="basis-legend">
           <div><dt><span className="status status-verified">✓ Employer’s posting</span></dt><dd>The employer’s own listing names {country}. Strongest evidence.</dd></div>
+          <div><dt><span className="status status-worldwide">Employer says worldwide</span></dt><dd>The employer’s own listing says remote worldwide but doesn’t name {country}. Worth confirming before applying.</dd></div>
           <div><dt><span className="status status-board">Job board</span></dt><dd>A job board says the role is open worldwide or lists {country}. Confirm on the posting before applying.</dd></div>
         </dl>}
         <div className="surface-foot">

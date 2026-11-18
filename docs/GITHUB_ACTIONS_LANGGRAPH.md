@@ -1,5 +1,7 @@
 # GitHub Actions: zero-server LangGraph specialist execution
 
+> **Status (18 Nov 2026): not the live scheduler.** GitHub started only 3–4 of the 96 scheduled waves a day, so live scheduling moved back to Supabase pg_cron in migration `0042_autonomous_volume.sql`: `ci-role-aware-specialist-pool-15m` runs `ci_run_specialist_pool(false)` every 10 minutes and `ci-daily-topup-hourly` tops up today's list. `CI_GITHUB_ACTIONS_LIVE` is `false`; this workflow stays available for `plan` and `canary` runs, and its live runner refuses to dispatch while that cron job is active. To switch back, follow the cutover below.
+
 This is the **recommended free-first** alternative to Oracle Cloud and Railway for Career Intelligence. It reuses six independent, real Python LangGraph single-specialist graphs, PostgreSQL checkpoints and the existing signed Supabase Edge specialist executor.
 
 The repository is public, so GitHub-hosted standard runners for this public repository are generally free, subject to GitHub's terms, quota/rate controls and policies. **They are ephemeral; these are NOT six persistent servers.** The workflow starts only when demand is positive (except an explicit six-role canary).

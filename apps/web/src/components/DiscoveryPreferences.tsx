@@ -144,7 +144,7 @@ export function DiscoveryPreferences(){
 
    <section className="settings-group" aria-labelledby="group-delivery">
     <header><span className="settings-step">3</span><div><h3 id="group-delivery">Daily list</h3>
-     <p>One role per employer, never repeated. Built every morning at 07:00 (Lagos time).</p></div></header>
+     <p>Each role is sent once. New roles from an employer you’ve seen before can still appear. Built at 07:00 (Lagos time) and topped up every hour.</p></div></header>
     <Field id="ci-daily-target" label="Maximum recommendations per day"
       hint="An upper limit, not a promise. Only jobs that pass every check are included.">
      <div className="range-row">
