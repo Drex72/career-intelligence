@@ -13,6 +13,7 @@ import {safePreview} from './telemetry.mjs';
 import {SourceFetchFailure,httpSourceFailure,sourceFailureReason} from './diagnostics.mjs';
 import {runPeople,runOutreach,runConversation} from './specialists.mjs';
 import {analyzeHimalayas,safeHimalayasCursor,isSoftwareRole,himalayasSearchURL} from './himalayas.mjs';
+import {analyzeJobicy,analyzeWWR,textLocationRule} from './boards.mjs';
 // Unkeyed shared Himalayas allowance: keep each run small; daily walks resume across runs.
 const HIMALAYAS_PAGES_PER_QUERY=4;
 const HIMALAYAS_SEARCH_PAGES_PER_RUN=8;
@@ -35,6 +36,17 @@ async function fetchJSON(url:string,timeout=12000):Promise<any>{
   const raw=await response.text();
   if(raw.length>2_000_000)throw new SourceFetchFailure('response_too_large');
   return JSON.parse(raw);
+}
+async function fetchText(url:string,maxBytes:number,timeout=15000):Promise<string>{
+  const response=await fetch(url,{
+    redirect:'error',signal:AbortSignal.timeout(timeout),
+    headers:{'Accept':'application/rss+xml, application/xml, text/xml','User-Agent':'CareerIntelligenceScheduledResearch/0.7'}
+  });
+  if(!response.ok)throw httpSourceFailure(response.status);
+  if(Number(response.headers.get('content-length')||0)>maxBytes)throw new SourceFetchFailure('response_too_large');
+  const raw=await response.text();
+  if(raw.length>maxBytes)throw new SourceFetchFailure('response_too_large');
+  return raw;
 }
 function remotiveRole(job:any,stamp:number){
   const title=String(job?.title||'').trim();
@@ -101,7 +113,7 @@ Deno.serve(async (request:Request)=>{
     const saved=await db.from('ci_pipeline_events').insert(payload);
     if(saved.error)report.telemetry_failures++;
   }
-  const report={remotive:0,himalayas:0,ats_jobs:0,boards_scanned:0,reviewed:0,verified_eligible:0,likely_eligible:0,unknown:0,ineligible:0,candidates:0,matched:0,
+  const report={remotive:0,himalayas:0,boards:0,ats_jobs:0,boards_scanned:0,reviewed:0,verified_eligible:0,likely_eligible:0,unknown:0,ineligible:0,candidates:0,matched:0,
     attempts:0,failures:0,telemetry_failures:0,received:0,normalized:0,filtered:0,
     rejected_role:0,rejected_source:0,rejected_stale:0,not_selected:0,save_failures:0,location_rules:0,
     people_processed:0,drafts_prepared:0,replies_classified:0};
@@ -150,6 +162,15 @@ Deno.serve(async (request:Request)=>{
           });
           if(saved.error||!saved.data){report.failures++;report.save_failures++;continue;}
           report.remotive++;
+          // candidate_required_location is Remotive's own rule: job-board evidence only.
+          const remotiveRule=textLocationRule(entry.location);
+          if(remotiveRule){
+            const rule=await db.rpc('ci_record_job_location_rule',{
+              p_job_id:saved.data,p_source_name:'remotive',p_source_url:entry.url,
+              p_worldwide:remotiveRule.worldwide,p_countries:remotiveRule.countries
+            });
+            if(rule.error||!rule.data)report.save_failures++;else report.location_rules++;
+          }
           if(report.candidates<10){
             for(const candidate of candidateBoards(entry.description,entry.company,entry.url)){
               const proposed=await db.rpc('ci_suggest_ats_board',{
@@ -265,6 +286,48 @@ Deno.serve(async (request:Request)=>{
 
         }catch{report.failures++;break;}
       }
+    }
+    // More free boards. Each keeps its own job URL (the boards' attribution terms)
+    // and records a location rule only when the board's text maps to countries.
+    const boardKeywords:string[]=[...new Set(((targets||[]) as any[])
+      .flatMap(t=>Array.isArray(t.role_keywords)?t.role_keywords.slice(0,8):[]))];
+    const boardFeeds:[string,()=>Promise<any>][]=[
+      ['jobicy',async()=>analyzeJobicy(await fetchJSON('https://jobicy.com/api/v2/remote-jobs?count=100&geo=anywhere'),now(),boardKeywords)],
+      ['weworkremotely',async()=>analyzeWWR(await fetchText('https://weworkremotely.com/remote-jobs.rss',6_000_000),now(),boardKeywords)],
+    ];
+    for(const [board,load] of boardFeeds){
+      if(!checked(await db.rpc('ci_claim_feed_slot',{p_action:board})))continue;
+      report.attempts++;
+      try{
+        const audit=await load();
+        report.received+=audit.scanned;report.normalized+=audit.jobs.length;
+        report.filtered+=audit.scanned-audit.jobs.length;
+        report.rejected_role+=audit.excluded.role;report.rejected_source+=audit.excluded.source;
+        report.rejected_stale+=audit.excluded.stale;
+        let ingested=0;
+        for(const job of audit.jobs){
+          const saved=await db.rpc('ci_ingest_board_job',{
+            p_source_name:job.source,p_source_id:job.sourceId,p_company:job.company,p_title:job.title,
+            p_url:job.url,p_published_at:job.published,p_location:job.location
+          });
+          if(saved.error||!saved.data){report.failures++;report.save_failures++;continue;}
+          ingested++;report.boards++;
+          if(job.rule){
+            const rule=await db.rpc('ci_record_job_location_rule',{
+              p_job_id:saved.data,p_source_name:job.source,p_source_url:job.url,
+              p_worldwide:job.rule.worldwide,p_countries:job.rule.countries
+            });
+            if(rule.error||!rule.data)report.save_failures++;else report.location_rules++;
+          }
+        }
+        for(const example of audit.samples)await recordStage('sources',board+'_filter','posting_filtered',
+          {provider:board,title:example.title,format:'remote_feed'},{reason:example.reason,status:'rejected'});
+        await recordStage('sources',board+'_feed','source_screened',
+          {provider:board,format:'remote_feed',received:audit.scanned},
+          {accepted:audit.jobs.length,ingested,rejected:audit.scanned-audit.jobs.length,
+           rejected_role:audit.excluded.role,rejected_source:audit.excluded.source,
+           rejected_stale:audit.excluded.stale,format:'normalized_job'});
+      }catch{report.failures++;}
     }
     const [active,limits]=await Promise.all([
       db.from('ci_discovery_sources').select('id,name,kind,state,config')
