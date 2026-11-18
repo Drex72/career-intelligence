@@ -132,6 +132,8 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_postgres_autonomous_volume.py -v
       - name: Verify Jobicy, We Work Remotely and Remotive board ingestion and labelled delivery
         run: python -m pytest services/worker/tests/integration/test_postgres_more_job_boards.py -v
+      - name: Close postings the employer removed and pause boards that no longer exist
+        run: python -m pytest services/worker/tests/integration/test_postgres_missing_postings.py -v
   web-tests:
     runs-on: ubuntu-latest
     steps:

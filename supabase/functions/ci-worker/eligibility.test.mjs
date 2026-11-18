@@ -98,3 +98,14 @@ test('official structured global job location is a worldwide lead, not an eligib
  assert.equal(classifyOfficialPosting('Infrastructure engineering position','Remote - Global').status,'likely_eligible');
  assert.notEqual(classifyRemoteScope('Nigeria market research','Lagos, Nigeria'),'worldwide');
 });
+test('a posting is missing only when a complete listing omits it',async()=>{
+ const {officialPostingLookup}=await import('./eligibility.mjs');
+ const listing={jobs:[{id:'a1'},{id:'b2'}]};
+ assert.equal(officialPostingLookup(listing,'ashby','a1').posting.id,'a1');
+ assert.equal(officialPostingLookup(listing,'ashby','a1').missing,false);
+ assert.equal(officialPostingLookup(listing,'ashby','zz').missing,true);
+ const big=Array.from({length:600},(_,i)=>({id:'j'+i}));
+ assert.equal(officialPostingLookup(big,'lever','zz').missing,false);
+ assert.equal(officialPostingLookup({},'ashby','zz').missing,false);
+ assert.equal(officialPostingLookup(listing,'ashby','bad id!').missing,false);
+});

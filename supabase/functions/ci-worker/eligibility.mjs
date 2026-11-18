@@ -16,6 +16,15 @@ export function findOfficialJob(payload,provider,sourceId) {
   if(!/^[A-Za-z0-9_-]{1,150}$/.test(sourceId))return null;
   return rows.slice(0,500).find(row=>String(row?.id)===sourceId)||null;
 }
+/** Find a posting in a full board listing. `missing` is true only when the listing is a
+ *  well-formed array shorter than the 500-row scan window and the id is absent, so a
+ *  posting beyond the window is never mistaken for a closed one. */
+export function officialPostingLookup(payload,provider,sourceId) {
+  const rows=Array.isArray(payload)?payload:Array.isArray(payload?.jobs)?payload.jobs:null;
+  if(!rows||!/^[A-Za-z0-9_-]{1,150}$/.test(String(sourceId||'')))return {posting:null,missing:false};
+  const posting=findOfficialJob(payload,provider,sourceId);
+  return {posting,missing:!posting&&rows.length<500};
+}
 export function postingDescription(posting,provider) {
   if(!posting)return '';
   const raw=provider==='greenhouse'?posting.content:

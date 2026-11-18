@@ -6,7 +6,7 @@ import {createClient} from 'npm:@supabase/supabase-js@2.119.0';
 import {validEnvelope,MAX_BODY_BYTES,MAX_BOARDS_PER_RUN,MAX_ATS_JOBS_PER_BOARD,MAX_REVIEWS_PER_RUN,selectDueSources,claimDueBoardBatch,prioritizeUSCompanies} from './policy.mjs';
 import {boardEndpoint,greenhouseJobDetailEndpoint,analyzeBoard,validBoard} from './ats.mjs';
 import {candidateBoards} from './candidates.mjs';
-import {classifyOfficialPosting,findOfficialJob,postingDescription,postingLocation} from './eligibility.mjs';
+import {classifyOfficialPosting,officialPostingLookup,postingDescription,postingLocation} from './eligibility.mjs';
 import {classifyWorkFacts} from './work-facts.mjs';
 import {scoreApprovedMatch,approvedRevision} from './matching.mjs';
 import {safePreview} from './telemetry.mjs';
@@ -26,17 +26,20 @@ function checked<T>(result:{data:T,error:unknown}):T{
 }
 function rows<T>(value:T[]|null|undefined):T[]{return value||[];}
 const now=()=>Date.now();
-async function fetchJSON(url:string,timeout=12000):Promise<any>{
+// Full ATS board listings carry every description; large employers exceed 2MB.
+const ATS_BOARD_MAX_BYTES=8_000_000;
+async function fetchJSON(url:string,timeout=12000,maxBytes=2_000_000):Promise<any>{
   const response=await fetch(url,{
     redirect:'error',signal:AbortSignal.timeout(timeout),
     headers:{'Accept':'application/json','User-Agent':'CareerIntelligenceScheduledResearch/0.7'}
   });
   if(!response.ok)throw httpSourceFailure(response.status);
-  if(Number(response.headers.get('content-length')||0)>2_000_000)throw new SourceFetchFailure('response_too_large');
+  if(Number(response.headers.get('content-length')||0)>maxBytes)throw new SourceFetchFailure('response_too_large');
   const raw=await response.text();
-  if(raw.length>2_000_000)throw new SourceFetchFailure('response_too_large');
+  if(raw.length>maxBytes)throw new SourceFetchFailure('response_too_large');
   return JSON.parse(raw);
 }
+const notFound=(error:unknown)=>error instanceof SourceFetchFailure&&(error as any).code==='board_not_found';
 async function fetchText(url:string,maxBytes:number,timeout=15000):Promise<string>{
   const response=await fetch(url,{
     redirect:'error',signal:AbortSignal.timeout(timeout),
@@ -116,6 +119,7 @@ Deno.serve(async (request:Request)=>{
   const report={remotive:0,himalayas:0,boards:0,ats_jobs:0,boards_scanned:0,reviewed:0,verified_eligible:0,likely_eligible:0,unknown:0,ineligible:0,candidates:0,matched:0,
     attempts:0,failures:0,telemetry_failures:0,received:0,normalized:0,filtered:0,
     rejected_role:0,rejected_source:0,rejected_stale:0,not_selected:0,save_failures:0,location_rules:0,
+    closed_postings:0,paused_boards:0,
     people_processed:0,drafts_prepared:0,replies_classified:0};
   try{
     const run=checked(await db.from('ci_worker_runs')
@@ -330,7 +334,7 @@ Deno.serve(async (request:Request)=>{
       }catch{report.failures++;}
     }
     const [active,limits]=await Promise.all([
-      db.from('ci_discovery_sources').select('id,name,kind,state,config')
+      db.from('ci_discovery_sources').select('id,name,kind,state,config,rate_limit_json')
         .eq('kind','ats').eq('state','active').limit(200),
       db.from('ci_api_rate_limits').select('action,last_run_at')
         .like('action','ats:ats:%').limit(500)
@@ -359,9 +363,10 @@ Deno.serve(async (request:Request)=>{
         {provider:cfg.provider,board:cfg.slug,format:'approved_board'},
         {approved:true,format:'provider_api'});
       try{
-        const result=await fetchJSON(boardEndpoint(cfg.provider,cfg.slug));
+        const result=await fetchJSON(boardEndpoint(cfg.provider,cfg.slug),15000,ATS_BOARD_MAX_BYTES);
         cached.set(board.name,result);
         report.boards_scanned++;
+        if(board.rate_limit_json?.missing_count)await db.rpc('ci_reset_board_missing',{p_source_id:board.id});
         const audit=analyzeBoard(result,cfg.provider,cfg.slug,cfg.company_name);
         const candidates=audit.jobs;
         const shortlisted=candidates.slice(0,MAX_ATS_JOBS_PER_BOARD);
@@ -403,9 +408,15 @@ Deno.serve(async (request:Request)=>{
            not_selected:candidates.length-shortlisted.length,format:'canonical_job'});
       }catch(error){
         report.failures++;
+        let status='retry_later';
+        // Three "not found" answers in a row pause the board instead of failing forever.
+        if(notFound(error)){
+          const missing=await db.rpc('ci_record_board_missing',{p_source_id:board.id});
+          if(!missing.error&&missing.data==='paused'){status='paused';report.paused_boards++;}
+        }
         await recordStage('registry','ats_source_gate','board_failed',
           {provider:cfg.provider,board:cfg.slug,format:'provider_api'},
-          {status:'retry_later',reason:sourceFailureReason(error)});
+          {status,reason:sourceFailureReason(error)});
       }
     }
     }
@@ -440,9 +451,26 @@ Deno.serve(async (request:Request)=>{
       reviewAttempts++;
       report.attempts++;
       try{
-        const official=chosen.provider==='greenhouse'
-          ?await fetchJSON(greenhouseJobDetailEndpoint(chosen.slug,chosen.id))
-          :findOfficialJob(cached.get(chosen.key)??await fetchJSON(boardEndpoint(chosen.provider,chosen.slug)),chosen.provider,chosen.id);
+        // A posting the employer's own ATS no longer has is closed, not a failure to retry.
+        let official:any=null;let gone=false;
+        try{
+          if(chosen.provider==='greenhouse'){
+            official=await fetchJSON(greenhouseJobDetailEndpoint(chosen.slug,chosen.id));
+          }else{
+            const lookup=officialPostingLookup(cached.get(chosen.key)??
+              await fetchJSON(boardEndpoint(chosen.provider,chosen.slug),15000,ATS_BOARD_MAX_BYTES),chosen.provider,chosen.id);
+            official=lookup.posting;gone=lookup.missing;
+          }
+        }catch(error){if(notFound(error))gone=true;else throw error;}
+        if(gone){
+          const closed=await db.rpc('ci_close_missing_posting',{p_job_id:item.job_id,p_source_url:chosen.sourceURL});
+          if(closed.error||closed.data!==true){report.failures++;continue;}
+          report.closed_postings++;
+          await recordStage('eligibility','official_eligibility_reviewer','posting_closed',
+            {provider:chosen.provider,board:chosen.slug,job_id:item.job_id,format:'official_posting'},
+            {status:'closed',reason:'posting_no_longer_listed'},item.job_id);
+          continue;
+        }
         if(!official)continue;
         const d=classifyOfficialPosting(postingDescription(official,chosen.provider),postingLocation(official,chosen.provider));
         const wrote=await db.rpc('ci_record_ats_review',{
