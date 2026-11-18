@@ -180,10 +180,14 @@ jobs:
           CI_LANGGRAPH_ENABLED: ${{ needs.plan.outputs.live }}
           CI_REQUIRE_CRON_DISABLED: ${{ needs.plan.outputs.live }}
           CI_MAX_DISPATCH_PER_CYCLE: '1'
+          # Scheduled waves arrive a few times a day, not every 15 minutes, so each
+          # job drains its role's demand for up to 6 minutes (stops early when idle
+          # or when a call makes no progress). Keep below timeout-minutes.
+          CI_RUN_BUDGET_SECONDS: '360'
           LANGGRAPH_STRICT_MSGPACK: 'true'
         run: |
           if [[ "$CI_LANGGRAPH_ENABLED" == true ]]; then
-            python -m career.hosted_langgraph --once --role "$CI_SPECIALIST_ROLE"
+            python -m career.hosted_langgraph --once --interval 5 --role "$CI_SPECIALIST_ROLE"
           else
             python -m career.hosted_langgraph --once --dry-run --role "$CI_SPECIALIST_ROLE"
           fi

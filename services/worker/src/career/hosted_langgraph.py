@@ -85,8 +85,59 @@ def worker_handler(role: str, endpoint: str, secret: str, client: httpx.Client):
             "dispatched": True,
             "status": str(output.get("status", "completed"))[:32],
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "observed": sanitized_counts(output),
         }
     return run
+
+
+# Allowlisted numeric fields of the Edge worker's per-call report. Anything else
+# in the response (titles, notes, identifiers) is never logged or checkpointed.
+REPORT_COUNT_KEYS = (
+    "received", "normalized", "filtered", "remotive", "himalayas", "boards_scanned",
+    "ats_jobs", "rejected_role", "rejected_source", "rejected_stale", "not_selected",
+    "save_failures", "candidates", "reviewed", "verified_eligible", "likely_eligible",
+    "unknown", "ineligible", "matched", "people_processed", "drafts_prepared",
+    "replies_classified", "attempts", "failures", "telemetry_failures",
+)
+# Counts that show a call actually advanced some queue or source.
+PROGRESS_KEYS = (
+    "received", "remotive", "himalayas", "boards_scanned", "ats_jobs", "candidates",
+    "reviewed", "matched", "people_processed", "drafts_prepared", "replies_classified",
+)
+_COUNT_CAP = 1_000_000
+
+
+def sanitized_counts(output: dict) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for key in REPORT_COUNT_KEYS:
+        value = output.get(key)
+        if isinstance(value, bool) or not isinstance(value, int):
+            continue
+        counts[key] = max(0, min(value, _COUNT_CAP))
+    return counts
+
+
+def made_progress(counts: dict[str, int]) -> bool:
+    return any(counts.get(key, 0) > 0 for key in PROGRESS_KEYS)
+
+
+def format_counts(counts: dict[str, int]) -> str:
+    shown = [f"{k}={counts[k]}" for k in REPORT_COUNT_KEYS if counts.get(k)]
+    return ",".join(shown) or "none"
+
+
+def write_step_summary(role: str, dispatches: int, totals: dict[str, int], stop_reason: str) -> None:
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    lines = [
+        f"### {role} specialist",
+        f"- Signed dispatches: {dispatches}",
+        f"- Stopped because: {stop_reason}",
+    ]
+    lines += [f"- {k}: {totals[k]}" for k in REPORT_COUNT_KEYS if totals.get(k)]
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
 
 
 def build_specialist_graph(role: str, handler, checkpointer):
@@ -163,11 +214,14 @@ def run_service(
     dry_run: bool = False,
     interval: float = 30.0,
     max_cycles: int = 0,
+    budget_seconds: int = 0,
 ) -> int:
     if role not in AGENT_ROLES:
         raise ValueError("CI_SPECIALIST_ROLE must identify one of six specialists")
     if not 5 <= interval <= 3600:
         raise ValueError("poll interval must be 5–3600 seconds")
+    if budget_seconds and not 60 <= budget_seconds <= 3600:
+        raise ValueError("run budget must be 0 (single call) or 60–3600 seconds")
     db_url = os.environ.get("DATABASE_URL", "")
     if not db_url:
         raise RuntimeError("DATABASE_URL is required")
@@ -208,11 +262,25 @@ def run_service(
                 graph = build_specialist_graph(
                     role, worker_handler(role, endpoint, secret, client), saver
                 )
+                started = time.monotonic()
+                slowest = 0.0
+                dispatches = 0
+                totals: dict[str, int] = {}
+                stop_reason = "shutdown requested"
+
+                def out_of_time(extra: float = 0.0) -> bool:
+                    # Reserve at least one worst-case call so the job never hits
+                    # the Actions timeout mid-request.
+                    return bool(budget_seconds) and (
+                        time.monotonic() - started + max(slowest, 30.0) + extra > budget_seconds
+                    )
+
                 try:
                     record_heartbeat(conn, role, instance_id, "starting")
                     cycle = 0
                     while not shutdown:
                         cycle += 1
+                        idle = stalled = expired = False
                         try:
                             record_heartbeat(conn, role, instance_id, "polling")
                             lane = role_demand(conn, role)
@@ -227,12 +295,28 @@ def run_service(
                                 for _ in range(dispatch_count):
                                     if shutdown:
                                         break
+                                    if dispatches and out_of_time():
+                                        expired = True
+                                        break
                                     thread = str(uuid4())
+                                    call_started = time.monotonic()
                                     result = graph.invoke(
                                         {"role": role}, {"configurable": {"thread_id": thread}}
                                     )
-                                    LOGGER.info("specialist=%s state=%s", role, result.get("status"))
+                                    slowest = max(slowest, time.monotonic() - call_started)
+                                    dispatches += 1
+                                    counts = result.get("observed") or {}
+                                    for key, value in counts.items():
+                                        totals[key] = totals.get(key, 0) + value
+                                    LOGGER.info(
+                                        "specialist=%s state=%s counts=%s",
+                                        role, result.get("status"), format_counts(counts)
+                                    )
+                                    if not made_progress(counts):
+                                        stalled = True
+                                        break
                             else:
+                                idle = True
                                 LOGGER.info(
                                     "specialist=%s idle queued=%d active=%d desired=%d dry_run=%s",
                                     role, ready, active_count, desired, dry_run
@@ -244,12 +328,35 @@ def run_service(
                             )
                             conn.rollback()
                             if once:
+                                stop_reason = f"dispatch failed ({type(exc).__name__})"
                                 raise
-                        if once or (max_cycles and cycle >= max_cycles):
+                        if once:
+                            # One-shot hosts (GitHub Actions) drain demand within a
+                            # wall-clock budget instead of making a single call.
+                            if not budget_seconds:
+                                stop_reason = "single invocation"
+                            elif idle:
+                                stop_reason = "no queued demand"
+                            elif stalled:
+                                stop_reason = "last dispatch made no progress"
+                            elif expired or out_of_time(interval):
+                                stop_reason = "time budget reached"
+                            else:
+                                time.sleep(interval)
+                                continue
+                            break
+                        if max_cycles and cycle >= max_cycles:
+                            stop_reason = "cycle limit reached"
                             break
                         time.sleep(interval)
                 finally:
                     record_heartbeat(conn, role, instance_id, "stopped")
+                    if once:
+                        LOGGER.info(
+                            "specialist=%s finished dispatches=%d stop=%s totals=%s",
+                            role, dispatches, stop_reason, format_counts(totals)
+                        )
+                        write_step_summary(role, dispatches, totals, stop_reason)
     return 0
 
 
@@ -264,12 +371,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--interval", type=float, default=float(os.getenv("CI_POLL_SECONDS", "30")))
+    parser.add_argument(
+        "--budget-seconds", type=int,
+        default=int(os.getenv("CI_RUN_BUDGET_SECONDS", "0")),
+        help="with --once: keep dispatching while demand remains, up to this many seconds",
+    )
     args = parser.parse_args(argv)
     if not args.role:
         parser.error("set CI_SPECIALIST_ROLE or supply --role")
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
     return run_service(
-        args.role, once=args.once, dry_run=args.dry_run, interval=args.interval
+        args.role, once=args.once, dry_run=args.dry_run, interval=args.interval,
+        budget_seconds=args.budget_seconds,
     )
 
 
