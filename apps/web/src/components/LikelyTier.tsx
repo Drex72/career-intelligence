@@ -38,7 +38,7 @@ export function LikelyTier({country,employerCountry}:{country:string;employerCou
   const showEmployer=employerCountry==='US';
   return <section className="workspace-surface likely-surface" style={{marginTop:20}}>
     <SectionHeading title="Worth a look: needs your confirmation"
-      description={'The employer’s posting says “remote worldwide” but doesn’t name '+country+'. Ask the employer before applying. These are kept separate and never count toward today’s list.'}/>
+      description={'The employer’s posting hints at remote work outside its home country, but the wording isn’t clear enough to add to today’s list, and it doesn’t name '+country+'. Check with the employer before applying.'}/>
     {error&&<Notice tone="danger">{error}</Notice>}
     <StateNotice loading={likely.loading} error={likely.error} retry={likely.reload}/>
     {likely.data&&<ResourceTable rowKey={r=>r.job_id} ariaLabel="Roles awaiting your confirmation" items={likely.data.items} columns={[

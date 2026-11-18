@@ -675,3 +675,4 @@ input[aria-invalid=true]{border-color:#E5A9AE}
 @media(prefers-reduced-motion:reduce){.choice-chip{transition:none}}
 .basis .status,.chip-row .status,.basis-legend .status{text-transform:none}
 .basis small a,.source-credit a{white-space:nowrap}
+.status-worldwide{background:#FFF4E2;border-color:#F1DCB4;color:#875E19}
