@@ -60,6 +60,18 @@ The planner reads the owner-specified preferences from the existing system; it d
 6. Run the workflow manually in mode **live**, or allow its 15-minute schedule. Every live runner independently checks the old scheduler remains disabled; if not, it fails closed.
 7. Confirm actual `ci_worker_runs.specialist_role` execution, distinct task claims, daily verified job throughput and worker failures before considering the migration complete.
 
+## Run budget and per-call counts
+
+GitHub does not honour the 15-minute schedule on this repository: between 13 and 17 Nov 2026 it started 3–4 scheduled waves a day instead of 96. So each live specialist job no longer makes a single signed call. With `CI_RUN_BUDGET_SECONDS=360`, the job keeps dispatching (one call per 5-second cycle) until one of these happens:
+
+- the planner reports no queued demand for the role;
+- a call returns no progress (nothing received, scanned, reviewed, matched or prepared). For example, every board is still on cooldown;
+- less than one worst-case call (at least 30 s) of the budget remains.
+
+A failed call still fails the job, as before. Set `CI_RUN_BUDGET_SECONDS` to `0` to restore the single-call behaviour.
+
+Each call logs only allowlisted integer counts from the Edge worker report, such as `specialist=discovery state=completed counts=received=40,himalayas=12,reviewed=3`. The job summary lists the totals and the stop reason. Titles, notes, identifiers and other response fields are never logged or checkpointed.
+
 **Do not enable GitHub Actions live and the old Supabase worker cron simultaneously.** The check in `hosted_langgraph.py` is an additional backstop, not permission to deliberately run dual schedulers.
 
 ## Rollback and diagnostics
