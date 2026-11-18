@@ -124,6 +124,8 @@ jobs:
         run: python -m pytest services/worker/tests/integration/test_langgraph_runtime.py -v
       - name: Boot six separately hosted LangGraph worker runtimes in safe dry run
         run: python -m pytest services/worker/tests/integration/test_postgres_hosted_langgraph.py -v
+      - name: Keep the likely-eligible tier separate from verified delivery
+        run: python -m pytest services/worker/tests/integration/test_postgres_likely_tier.py -v
   web-tests:
     runs-on: ubuntu-latest
     steps:

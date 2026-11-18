@@ -462,6 +462,18 @@ Deno.serve(async (request:Request)=>{
       const xs=list(check(await db.from('ci_daily_batch_items').select('job_id,company_id,rank,ci_jobs(title,apply_url,published_at),ci_companies(legal_name)').eq('batch_id',bs[0].id).order('rank').limit(100)));
       return reply(200,{items:xs.map((x:any)=>({job_id:x.job_id,company_id:x.company_id,rank:x.rank,title:x.ci_jobs?.title||'',apply_url:x.ci_jobs?.apply_url||'',published_at:x.ci_jobs?.published_at||null,company_name:x.ci_companies?.legal_name||''}))});
     }
+    if(operation.type==='likely'){
+      // Separate tier: worldwide wording without explicit Nigeria permission.
+      // Never part of the verified batch or the delivered-jobs ledger.
+      const rows=list(check(await db.rpc('ci_likely_tier',{p_owner_user_id:owner,p_limit:100})));
+      return reply(200,{items:rows.map((r:any)=>({
+        job_id:r.job_id,company_name:r.company_name||'',title:r.title||'',
+        apply_url:typeof r.apply_url==='string'&&r.apply_url.startsWith('https://')?r.apply_url:'',
+        published_at:r.published_at,reason:r.reason||'',expires_at:r.expires_at,
+        worldwide_scope:r.worldwide_scope===true,us_employer_evidence:r.us_employer_evidence===true,
+        decision:r.decision??null
+      })),note:'Likely eligible: the official posting says remote worldwide but does not explicitly permit Nigeria. Confirm Nigeria hiring with the employer before applying. These roles never count toward verified recommendations.'});
+    }
     if(operation.type==='evidence'){
       const job=check(await db.from('ci_jobs').select('id,title,apply_url,status,company_id').eq('id',operation.jobId).maybeSingle());
       if(!job)return reply(404,{error:'Job not found'});
@@ -472,29 +484,6 @@ Deno.serve(async (request:Request)=>{
       ]);
       return reply(200,{job,assessments:list(check(assessments)),evidence:list(check(evidence)),sources:list(check(sources)),
         note:'Eligibility is only verified when current, authoritative employer evidence supports the specific role. A remote label is not proof of Nigeria eligibility.'});
-    }
-    if(operation.type==='savePreferences'){
-      const families=['any','backend','frontend','fullstack','platform','ai_ml','security','data'];
-      const levels=['any','intern','junior','mid','senior','staff'];
-      const modes=['any','remote','hybrid','onsite'];
-      const validArray=(items:unknown,allowed:string[],max:number)=>
-        Array.isArray(items)&&items.length>0&&items.length<=max&&
-        items.every((x:any)=>typeof x==='string'&&allowed.includes(x))&&
-        new Set(items).size===items.length&&
-        (!items.includes('any')||items.length===1);
-      if(!body||!Number.isInteger(body.daily_target)||body.daily_target<1||body.daily_target>100||
-        !validArray(body.job_families,families,7)||
-        !validArray(body.seniority_levels,levels,5)||
-        !validArray(body.work_modes,modes,4)||
-        !['any','confirmed_required'].includes(body.sponsorship))
-        return reply(422,{error:'Invalid discovery preferences'});
-      const saved=check(await db.rpc('ci_save_discovery_preferences',{
-        p_owner:owner,p_target:body.daily_target,p_families:body.job_families,
-        p_levels:body.seniority_levels,p_modes:body.work_modes,
-        p_sponsorship:body.sponsorship
-      }));
-      if(!saved)return reply(409,{error:'Preferences could not be saved'});
-      return reply(200,{saved:true,note:'Future recommendation batches use these limits. Previously delivered items are never silently changed.'});
     }
     if(operation.type==='generateBatch'){
       const localDate = new Intl.DateTimeFormat('sv-SE',{
@@ -562,6 +551,37 @@ Deno.serve(async (request:Request)=>{
     }
     let body:any;
     try{body=await request.json();}catch{return reply(400,{error:'Invalid JSON body'});}
+    if(operation.type==='savePreferences'){
+      const families=['any','backend','frontend','fullstack','platform','ai_ml','security','data'];
+      const levels=['any','intern','junior','mid','senior','staff'];
+      const modes=['any','remote','hybrid','onsite'];
+      const validArray=(items:unknown,allowed:string[],max:number)=>
+        Array.isArray(items)&&items.length>0&&items.length<=max&&
+        items.every((x:any)=>typeof x==='string'&&allowed.includes(x))&&
+        new Set(items).size===items.length&&
+        (!items.includes('any')||items.length===1);
+      if(!body||!Number.isInteger(body.daily_target)||body.daily_target<1||body.daily_target>100||
+        !validArray(body.job_families,families,7)||
+        !validArray(body.seniority_levels,levels,5)||
+        !validArray(body.work_modes,modes,4)||
+        !['any','confirmed_required'].includes(body.sponsorship))
+        return reply(422,{error:'Invalid discovery preferences'});
+      const saved=check(await db.rpc('ci_save_discovery_preferences',{
+        p_owner:owner,p_target:body.daily_target,p_families:body.job_families,
+        p_levels:body.seniority_levels,p_modes:body.work_modes,
+        p_sponsorship:body.sponsorship
+      }));
+      if(!saved)return reply(409,{error:'Preferences could not be saved'});
+      return reply(200,{saved:true,note:'Future recommendation batches use these limits. Previously delivered items are never silently changed.'});
+    }
+    if(operation.type==='likelyDecision'){
+      if(!body||!isUuid(body.job_id)||!['confirmed','dismissed'].includes(body.decision))
+        return reply(422,{error:'Invalid likely-tier decision'});
+      const saved=check(await db.rpc('ci_decide_likely_tier',{
+        p_owner_user_id:owner,p_job_id:body.job_id,p_decision:body.decision}));
+      if(!saved)return reply(409,{error:'Job is no longer in the likely-eligible tier'});
+      return reply(200,{saved:true});
+    }
     if(operation.type==='decideCandidate'){
       if(!body||!isUuid(body.candidate_id)||!['approved','rejected'].includes(body.decision))
         return reply(422,{error:'Candidate UUID and valid decision required'});
