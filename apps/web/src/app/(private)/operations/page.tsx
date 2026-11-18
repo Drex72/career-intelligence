@@ -1,6 +1,6 @@
 'use client';
+import Link from 'next/link';
 import {PageHeading} from '@/components/WorkspaceUI';
-import {DiscoveryPreferences} from '@/components/DiscoveryPreferences';
 import {readinessGuidance} from '@/lib/readiness-guidance.mjs';
 import {useState, type FormEvent} from 'react';
 import {useResource} from '@/components/useResource';
@@ -94,7 +94,7 @@ export default function Operations(){
     <section className="metric-grid">{Object.entries(tasks.data?.states||{}).map(([state,count])=><div className="metric" key={state}>
       <span>{state.replace(/_/g,' ')}</span><strong>{count}</strong></div>)}</section>
     {tasks.data&&Object.keys(tasks.data.states).length===0&&<div className="empty-state">No PostgreSQL workflow tasks have been created yet.</div>}
-    <DiscoveryPreferences/>
+    <div className="summary-strip" role="note"><span className="summary-indicator" aria-hidden="true"/><span>Country, role keywords and daily list size now live in Search settings.</span><Link href="/settings">Open Search settings <span aria-hidden="true">→</span></Link></div>
     <section className="workspace-surface" aria-labelledby="readiness-heading">
       <div className="section-title"><div>
         <h2 id="readiness-heading">Recommendation pipeline health</h2>

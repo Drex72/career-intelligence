@@ -4,10 +4,11 @@ import { usePathname, useRouter } from 'next/navigation';
 import {useRef,useState} from 'react';
 import { getSupabase } from '@/lib/supabase';
 
-type IconName='overview'|'opportunities'|'applications'|'people'|'knowledge'|'outreach'|'conversations'|'operations'|'factory';
+type IconName='overview'|'settings'|'opportunities'|'applications'|'people'|'knowledge'|'outreach'|'conversations'|'operations'|'factory';
 const links:{href:string;label:string;icon:IconName}[]=[
   {href:'/',label:'Overview',icon:'overview'},
   {href:'/opportunities',label:'Opportunities',icon:'opportunities'},
+  {href:'/settings',label:'Search settings',icon:'settings'},
   {href:'/applications',label:'Applications',icon:'applications'},
   {href:'/people',label:'People intelligence',icon:'people'},
   {href:'/knowledge',label:'Knowledge base',icon:'knowledge'},
@@ -18,6 +19,7 @@ const links:{href:string;label:string;icon:IconName}[]=[
 ];
 const paths:Record<IconName,React.ReactNode>={
   overview:<><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
+  settings:<><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></>,
   opportunities:<><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M11 8v6m-3-3h6"/></>,
   applications:<><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M9 5V3h6v2M8 11h8M8 15h6"/></>,
   people:<><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 5"/></>,
